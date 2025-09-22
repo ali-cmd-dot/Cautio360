@@ -26,10 +26,8 @@ const DEVICE_CONDITIONS = {
     'lense_issue': 'Lense issue',
     'sim_module_fail': 'SIM module fail',
     'auto_restart': 'Auto restart',
-    'device_tampered': 'Device tampered',
-    'new': 'New Device' // For stock integration
+    'device_tampered': 'Device tampered'
 };
-
 // Required CSV columns for inward
 const INWARD_REQUIRED_COLUMNS = [
     'Device Registration Number',
@@ -109,6 +107,131 @@ function checkInventoryUserSession() {
 function goBackToDashboard() {
     // Navigate back to main dashboard
     window.location.href = './';
+}
+// Main Tab Management Functions
+function showDeviceManagementTab() {
+    // Update main tab buttons
+    document.getElementById('deviceManagementTab').classList.add('active');
+    document.getElementById('simManagementTab').classList.remove('active');
+    
+    // Show/hide sections
+    document.getElementById('deviceManagementSection').classList.remove('hidden');
+    document.getElementById('simManagementSection').classList.add('hidden');
+    
+    // Load device management data
+    loadInwardDevices();
+    loadOutwardDevices();
+    loadStockSummary();
+}
+
+function showSIMManagementTab() {
+    // Update main tab buttons
+    document.getElementById('simManagementTab').classList.add('active');
+    document.getElementById('deviceManagementTab').classList.remove('active');
+    
+    // Show/hide sections
+    document.getElementById('simManagementSection').classList.remove('hidden');
+    document.getElementById('deviceManagementSection').classList.add('hidden');
+    
+    // Load SIM management data
+    loadSIMAssignments();
+    loadSIMReplacements();
+    loadSIMHistory();
+}
+
+// SIM Management Sub-Tab Functions
+function showSIMAssignmentTab() {
+    // Update sub-tab buttons
+    document.getElementById('simAssignmentTab').classList.add('active');
+    document.getElementById('simReplacementTab').classList.remove('active');
+    document.getElementById('simHistoryTab').classList.remove('active');
+    
+    // Show/hide content
+    document.getElementById('simAssignmentTabContent').classList.remove('hidden');
+    document.getElementById('simReplacementTabContent').classList.add('hidden');
+    document.getElementById('simHistoryTabContent').classList.add('hidden');
+    
+    loadSIMAssignments();
+}
+
+function showSIMReplacementTab() {
+    // Update sub-tab buttons
+    document.getElementById('simReplacementTab').classList.add('active');
+    document.getElementById('simAssignmentTab').classList.remove('active');
+    document.getElementById('simHistoryTab').classList.remove('active');
+    
+    // Show/hide content
+    document.getElementById('simReplacementTabContent').classList.remove('hidden');
+    document.getElementById('simAssignmentTabContent').classList.add('hidden');
+    document.getElementById('simHistoryTabContent').classList.add('hidden');
+    
+    loadSIMReplacements();
+}
+
+function showSIMHistoryTab() {
+    // Update sub-tab buttons
+    document.getElementById('simHistoryTab').classList.add('active');
+    document.getElementById('simAssignmentTab').classList.remove('active');
+    document.getElementById('simReplacementTab').classList.remove('active');
+    
+    // Show/hide content
+    document.getElementById('simHistoryTabContent').classList.remove('hidden');
+    document.getElementById('simAssignmentTabContent').classList.add('hidden');
+    document.getElementById('simReplacementTabContent').classList.add('hidden');
+    
+    loadSIMHistory();
+}
+
+// Floating Action Button Functions
+function toggleInventoryFAB() {
+    const fabMenu = document.getElementById('inventoryFABMenu');
+    const mainFAB = document.getElementById('inventoryMainFAB');
+    
+    if (fabMenu.classList.contains('hidden')) {
+        fabMenu.classList.remove('hidden');
+        mainFAB.classList.add('active');
+    } else {
+        fabMenu.classList.add('hidden');
+        mainFAB.classList.remove('active');
+    }
+}
+
+function openInventoryFileUpload() {
+    // Determine current active tab and trigger appropriate file upload
+    if (!document.getElementById('simManagementSection').classList.contains('hidden')) {
+        // SIM Management is active - no file upload for now
+        alert('File upload for SIM management coming soon!');
+    } else {
+        // Device Management is active
+        if (!document.getElementById('outwardTabContent').classList.contains('hidden')) {
+            // Outward tab is active
+            document.getElementById('outwardCSVFileInput').click();
+        } else {
+            // Inward tab is active
+            document.getElementById('inwardCSVFileInput').click();
+        }
+    }
+    toggleInventoryFAB(); // Close FAB menu
+}
+
+function openInventorySingleEntry() {
+    // Determine current active tab and show appropriate form
+    if (!document.getElementById('simManagementSection').classList.contains('hidden')) {
+        // SIM Management is active
+        if (!document.getElementById('simAssignmentTabContent').classList.contains('hidden')) {
+            showAddSIMAssignmentForm();
+        } else if (!document.getElementById('simReplacementTabContent').classList.contains('hidden')) {
+            showSIMReplacementForm();
+        }
+    } else {
+        // Device Management is active
+        if (!document.getElementById('outwardTabContent').classList.contains('hidden')) {
+            showAddOutwardForm();
+        } else {
+            showAddInwardForm();
+        }
+    }
+    toggleInventoryFAB(); // Close FAB menu
 }
 
 // Setup event listeners for inventory
@@ -208,11 +331,11 @@ async function autoAddStockToInward(stockItem) {
             return;
         }
         
-        // Add to inward devices with "new" condition
+        // Add to inward devices with default condition
         const inwardData = {
             device_registration_number: stockItem.device_registration_number,
             device_imei: stockItem.device_imei,
-            device_condition: 'good', // Auto-set as "good" condition as per user requirement
+            device_condition: 'good', // Default condition
             notes: 'Auto-added from stock import',
             processed_by: 'system',
             stock_id: stockItem.id,
@@ -1600,3 +1723,290 @@ window.inventoryFunctions = {
     returnDevice,
     goBackToDashboard
 };
+// SIM Management Functions
+async function loadSIMAssignments() {
+    try {
+        const { data: simData, error } = await supabase
+            .from('device_sim_management')
+            .select(`
+                *,
+                stock!inner(device_registration_number, device_imei, device_model_no)
+            `)
+            .eq('status', 'active')
+            .order('assigned_date', { ascending: false });
+
+        if (error) {
+            console.error('Error loading SIM assignments:', error);
+            return;
+        }
+
+        const simAssignmentList = document.getElementById('simAssignmentList');
+        const simAssignmentEmptyState = document.getElementById('simAssignmentEmptyState');
+        const simAssignmentCount = document.getElementById('simAssignmentCount');
+
+        if (!simData || simData.length === 0) {
+            simAssignmentList.innerHTML = '';
+            simAssignmentEmptyState.classList.remove('hidden');
+            simAssignmentCount.textContent = '0';
+            return;
+        }
+
+        simAssignmentEmptyState.classList.add('hidden');
+        simAssignmentCount.textContent = simData.length;
+
+        let simAssignmentHTML = '';
+        simData.forEach(assignment => {
+            simAssignmentHTML += createSIMAssignmentCard(assignment);
+        });
+
+        simAssignmentList.innerHTML = simAssignmentHTML;
+    } catch (error) {
+        console.error('Error loading SIM assignments:', error);
+    }
+}
+
+function createSIMAssignmentCard(assignment) {
+    return `
+        <div class="sim-card">
+            <div class="flex justify-between items-start mb-4">
+                <div>
+                    <h4 class="text-heading-7 dark:text-dark-base-600 mb-2">${assignment.stock.device_registration_number}</h4>
+                    <p class="text-body-s-regular dark:text-dark-base-500">IMEI: ${assignment.stock.device_imei}</p>
+                    <p class="text-body-s-regular dark:text-dark-base-500">Model: ${assignment.stock.device_model_no}</p>
+                </div>
+                <span class="sim-assignment-badge ${assignment.status}">
+                    ${assignment.status}
+                </span>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <p class="text-body-s-semibold dark:text-dark-base-500 mb-1">SIM Number</p>
+                    <p class="text-body-m-regular dark:text-dark-base-600">${assignment.current_sim_no || 'Not assigned'}</p>
+                </div>
+                <div>
+                    <p class="text-body-s-semibold dark:text-dark-base-500 mb-1">Assigned Date</p>
+                    <p class="text-body-m-regular dark:text-dark-base-600">${new Date(assignment.assigned_date).toLocaleDateString()}</p>
+                </div>
+            </div>
+            
+            ${assignment.notes ? `
+                <div class="mb-4">
+                    <p class="text-body-s-semibold dark:text-dark-base-500 mb-1">Notes</p>
+                    <p class="text-body-s-regular dark:text-dark-base-400">${assignment.notes}</p>
+                </div>
+            ` : ''}
+            
+            <div class="flex gap-2">
+                <button onclick="editSIMAssignment('${assignment.id}')" class="device-action-btn device-action-edit">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                    Edit
+                </button>
+                <button onclick="replaceSIM('${assignment.device_registration_number}')" class="device-action-btn device-action-warning">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M16 3h5v5M20.49 9A9 9 0 1 1 11 4.64"/>
+                    </svg>
+                    Replace SIM
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+async function loadSIMReplacements() {
+    try {
+        const { data: replacementData, error } = await supabase
+            .from('sim_replacement_history')
+            .select('*')
+            .order('replacement_date', { ascending: false });
+
+        if (error) {
+            console.error('Error loading SIM replacements:', error);
+            return;
+        }
+
+        const simReplacementList = document.getElementById('simReplacementList');
+        const simReplacementEmptyState = document.getElementById('simReplacementEmptyState');
+        const simReplacementCount = document.getElementById('simReplacementCount');
+
+        if (!replacementData || replacementData.length === 0) {
+            simReplacementList.innerHTML = '';
+            simReplacementEmptyState.classList.remove('hidden');
+            simReplacementCount.textContent = '0';
+            return;
+        }
+
+        simReplacementEmptyState.classList.add('hidden');
+        simReplacementCount.textContent = replacementData.length;
+
+        let replacementHTML = '';
+        replacementData.forEach(replacement => {
+            replacementHTML += createSIMReplacementCard(replacement);
+        });
+
+        simReplacementList.innerHTML = replacementHTML;
+    } catch (error) {
+        console.error('Error loading SIM replacements:', error);
+    }
+}
+
+function createSIMReplacementCard(replacement) {
+    return `
+        <div class="sim-card">
+            <div class="flex justify-between items-start mb-4">
+                <div>
+                    <h4 class="text-heading-7 dark:text-dark-base-600 mb-2">${replacement.device_registration_number}</h4>
+                    <p class="text-body-s-regular dark:text-dark-base-500">IMEI: ${replacement.device_imei}</p>
+                </div>
+                <span class="sim-assignment-badge ${replacement.validated ? 'active' : 'inactive'}">
+                    ${replacement.validated ? 'Validated' : 'Pending'}
+                </span>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <p class="text-body-s-semibold dark:text-dark-base-500 mb-1">Old SIM</p>
+                    <p class="text-body-m-regular dark:text-dark-base-600">${replacement.old_sim_no || 'N/A'}</p>
+                </div>
+                <div>
+                    <p class="text-body-s-semibold dark:text-dark-base-500 mb-1">New SIM</p>
+                    <p class="text-body-m-regular dark:text-dark-base-600">${replacement.new_sim_no}</p>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <p class="text-body-s-semibold dark:text-dark-base-500 mb-1">Replacement Date</p>
+                    <p class="text-body-m-regular dark:text-dark-base-600">${new Date(replacement.replacement_date).toLocaleDateString()}</p>
+                </div>
+                <div>
+                    <p class="text-body-s-semibold dark:text-dark-base-500 mb-1">Replaced By</p>
+                    <p class="text-body-m-regular dark:text-dark-base-600">${replacement.replaced_by}</p>
+                </div>
+            </div>
+            
+            ${replacement.replacement_reason ? `
+                <div class="mb-4">
+                    <p class="text-body-s-semibold dark:text-dark-base-500 mb-1">Reason</p>
+                    <p class="text-body-s-regular dark:text-dark-base-400">${replacement.replacement_reason}</p>
+                </div>
+            ` : ''}
+            
+            ${!replacement.validated ? `
+                <div class="flex gap-2">
+                    <button onclick="validateSIMReplacement('${replacement.id}')" class="device-action-btn device-action-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20,6 9,17 4,12"/>
+                        </svg>
+                        Validate
+                    </button>
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+async function loadSIMHistory() {
+    try {
+        const { data: historyData, error } = await supabase
+            .from('sim_replacement_history')
+            .select('*')
+            .order('replacement_date', { ascending: false });
+
+        if (error) {
+            console.error('Error loading SIM history:', error);
+            return;
+        }
+
+        const simHistoryList = document.getElementById('simHistoryList');
+        const simHistoryEmptyState = document.getElementById('simHistoryEmptyState');
+        const simHistoryCount = document.getElementById('simHistoryCount');
+
+        if (!historyData || historyData.length === 0) {
+            simHistoryList.innerHTML = '';
+            simHistoryEmptyState.classList.remove('hidden');
+            simHistoryCount.textContent = '0';
+            return;
+        }
+
+        simHistoryEmptyState.classList.add('hidden');
+        simHistoryCount.textContent = historyData.length;
+
+        let historyHTML = '<div class="history-timeline">';
+        historyData.forEach(record => {
+            historyHTML += createSIMHistoryItem(record);
+        });
+        historyHTML += '</div>';
+
+        simHistoryList.innerHTML = historyHTML;
+    } catch (error) {
+        console.error('Error loading SIM history:', error);
+    }
+}
+
+function createSIMHistoryItem(record) {
+    return `
+        <div class="history-item sim-change">
+            <div class="flex justify-between items-start mb-2">
+                <h4 class="text-heading-7 dark:text-dark-base-600">${record.device_registration_number}</h4>
+                <span class="text-body-s-regular dark:text-dark-base-500">${new Date(record.replacement_date).toLocaleString()}</span>
+            </div>
+            
+            <p class="text-body-m-regular dark:text-dark-base-600 mb-2">
+                SIM replaced: ${record.old_sim_no || 'N/A'} → ${record.new_sim_no}
+            </p>
+            
+            ${record.replacement_reason ? `
+                <p class="text-body-s-regular dark:text-dark-base-500 mb-2">
+                    Reason: ${record.replacement_reason}
+                </p>
+            ` : ''}
+            
+            <p class="text-body-s-regular dark:text-dark-base-400">
+                Replaced by: ${record.replaced_by}
+            </p>
+        </div>
+    `;
+}
+
+// Placeholder functions for SIM management forms
+function showAddSIMAssignmentForm() {
+    alert('SIM Assignment form coming soon!');
+}
+
+function showSIMReplacementForm() {
+    alert('SIM Replacement form coming soon!');
+}
+
+function editSIMAssignment(assignmentId) {
+    alert('Edit SIM Assignment coming soon!');
+}
+
+function replaceSIM(deviceRegNumber) {
+    alert('Replace SIM coming soon!');
+}
+
+function validateSIMReplacement(replacementId) {
+    alert('Validate SIM Replacement coming soon!');
+}
+
+// Add to global window object
+window.showDeviceManagementTab = showDeviceManagementTab;
+window.showSIMManagementTab = showSIMManagementTab;
+window.showSIMAssignmentTab = showSIMAssignmentTab;
+window.showSIMReplacementTab = showSIMReplacementTab;
+window.showSIMHistoryTab = showSIMHistoryTab;
+window.toggleInventoryFAB = toggleInventoryFAB;
+window.openInventoryFileUpload = openInventoryFileUpload;
+window.openInventorySingleEntry = openInventorySingleEntry;
+window.loadSIMAssignments = loadSIMAssignments;
+window.loadSIMReplacements = loadSIMReplacements;
+window.loadSIMHistory = loadSIMHistory;
+window.showAddSIMAssignmentForm = showAddSIMAssignmentForm;
+window.showSIMReplacementForm = showSIMReplacementForm;
+window.editSIMAssignment = editSIMAssignment;
+window.replaceSIM = replaceSIM;
+window.validateSIMReplacement = validateSIMReplacement;
