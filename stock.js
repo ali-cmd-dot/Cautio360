@@ -304,10 +304,6 @@ function createStockTableRow(item) {
         let badgeClass, conditionText;
 
         switch (condition) {
-            case "new":
-                badgeClass = "compact-badge condition-new";
-                conditionText = "New Device";
-                break;
             case "good":
                 badgeClass = "compact-badge condition-good";
                 conditionText = "Good";
@@ -551,7 +547,7 @@ async function validateAndImportCSV(results, filename) {
                 device_registration_number: deviceRegNumber,
                 device_imei: deviceImei,
                 current_status: "available",
-                device_condition: "new", // NEW: Default condition for automatic inventory integration
+                device_condition: "good", // Default condition
                 imported_by: userSession?.email || "unknown",
             };
 
