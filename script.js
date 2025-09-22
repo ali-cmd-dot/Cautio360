@@ -252,72 +252,7 @@ async function handleManualEmailScheduling(e) {
     }
 }
 
-// Customer Dropdown Functions
-function toggleCustomerDropdown() {
-    const dropdown = document.getElementById('customerDropdown');
-    dropdown.classList.toggle('hidden');
-    
-    if (!dropdown.classList.contains('hidden')) {
-        populateCustomerDropdown();
-    }
-}
-
-function populateCustomerDropdown() {
-    const dropdown = document.getElementById('customerDropdown');
-    
-    if (approvedCustomers.length === 0) {
-        dropdown.innerHTML = '<div class="p-4 text-center text-body-s-regular dark:text-dark-base-500">No customers available</div>';
-        return;
-    }
-    
-    let dropdownHTML = '<div class="max-h-96 overflow-y-auto">';
-    dropdownHTML += '<div class="p-2 border-b dark:border-dark-stroke-contrast-400">';
-    dropdownHTML += '<button onclick="selectCustomer(null)" class="w-full text-left px-3 py-2 rounded hover:dark:bg-dark-fill-base-600 text-body-s-regular dark:text-dark-base-600">All Customers</button>';
-    dropdownHTML += '</div>';
-    
-    approvedCustomers.forEach(customer => {
-        dropdownHTML += `
-            <button onclick="selectCustomer(${customer.id})" class="w-full text-left px-3 py-2 hover:dark:bg-dark-fill-base-600 text-body-s-regular dark:text-dark-base-600 ${selectedCustomerId === customer.id ? 'dark:bg-brand-blue-600 dark:text-utility-white' : ''}">
-                ${customer.customer_name}
-            </button>
-        `;
-    });
-    
-    dropdownHTML += '</div>';
-    dropdown.innerHTML = dropdownHTML;
-}
-
-function selectCustomer(customerId) {
-    selectedCustomerId = customerId;
-    const selectedText = document.getElementById('selectedCustomerText');
-    
-    if (customerId === null) {
-        selectedText.textContent = 'All Customers';
-        filteredCustomers = [...approvedCustomers];
-    } else {
-        const customer = approvedCustomers.find(c => c.id === customerId);
-        if (customer) {
-            selectedText.textContent = customer.customer_name;
-            filteredCustomers = [customer];
-        }
-    }
-    
-    // Hide dropdown
-    document.getElementById('customerDropdown').classList.add('hidden');
-    
-    // Update current tab
-    updateTabsContent();
-}
-
-// Click outside to close dropdown
-document.addEventListener('click', function(event) {
-    const dropdown = document.getElementById('customerDropdown');
-    const button = event.target.closest('[onclick="toggleCustomerDropdown()"]');
-    
-    if (!button && !dropdown.contains(event.target)) {
-        dropdown.classList.add('hidden');
-    }
-});
+// Customer dropdown functionality removed as per requirements
 
 // Page Navigation Functions
 function showDashboardPage() {
