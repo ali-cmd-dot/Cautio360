@@ -89,238 +89,116 @@ function clearUserSession() {
 }
 
 function showSessionRestored() {
-    showEmailToast(`Welcome back, ${userSession.full_name || userSession.email}! Session restored.`);
+    showEmailToast(`Welcome back, ${userSession.full_name || userSession.email}!`);
 }
 
-// Email Scheduling System
-async function startEmailScheduler() {
-    // Load scheduled emails
-    await loadScheduledEmails();
-    
-    // Check every minute for emails to send
-    setInterval(checkScheduledEmails, 60000);
-    
-    console.log('📧 Email scheduler started');
-}
-
-async function loadScheduledEmails() {
-    try {
-        const { data, error } = await supabase
-            .from('scheduled_emails')
-            .select('*')
-            .eq('status', 'pending')
-            .order('scheduled_datetime', { ascending: true });
-
-        if (error) {
-            console.error('Error loading scheduled emails:', error);
-            return;
-        }
-
-        scheduledEmails = data || [];
-        console.log(`📧 Loaded ${scheduledEmails.length} scheduled emails`);
-    } catch (error) {
-        console.error('Error loading scheduled emails:', error);
-    }
-}
-
-async function checkScheduledEmails() {
-    const now = new Date();
-    
-    for (const scheduledEmail of scheduledEmails) {
-        const scheduledTime = new Date(scheduledEmail.scheduled_datetime);
-        
-        if (scheduledTime <= now) {
-            await processScheduledEmail(scheduledEmail);
-        }
-    }
-}
-
-async function processScheduledEmail(scheduledEmail) {
-    try {
-        // Get customer data
-        const { data: customer, error: customerError } = await supabase
-            .from('customers')
-            .select('*')
-            .eq('id', scheduledEmail.customer_id)
-            .single();
-
-        if (customerError) {
-            console.error('Error fetching customer:', customerError);
-            return;
-        }
-
-        // Send the email
-        const emailSent = await sendEmail(
-            scheduledEmail.email_type, 
-            customer, 
-            scheduledEmail.custom_message || ''
-        );
-
-        if (emailSent) {
-            // Mark as sent
-            await supabase
-                .from('scheduled_emails')
-                .update({ 
-                    status: 'sent',
-                    sent_at: new Date().toISOString()
-                })
-                .eq('id', scheduledEmail.id);
-
-            // Remove from local array
-            scheduledEmails = scheduledEmails.filter(e => e.id !== scheduledEmail.id);
-            
-            console.log(`📧 Sent scheduled email to ${customer.customer_name}`);
-        }
-    } catch (error) {
-        console.error('Error processing scheduled email:', error);
-        
-        // Mark as failed
-        await supabase
-            .from('scheduled_emails')
-            .update({ 
-                status: 'failed',
-                error_message: error.message
-            })
-            .eq('id', scheduledEmail.id);
-    }
-}
-
-// Manual Email Scheduling
-function showManualEmailModal(customer) {
-    currentEmailTarget = customer;
-    document.getElementById('selectedCustomerName').textContent = customer.customer_name;
-    document.getElementById('manualEmailModal').classList.remove('hidden');
-    
-    // Set default date and time to tomorrow at 9 AM
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(9, 0, 0, 0);
-    
-    document.querySelector('input[name="scheduleDate"]').value = tomorrow.toISOString().split('T')[0];
-    document.querySelector('input[name="scheduleTime"]').value = '09:00';
-}
-
-function closeManualEmailModal() {
-    currentEmailTarget = null;
-    document.getElementById('manualEmailModal').classList.add('hidden');
-    document.getElementById('manualEmailForm').reset();
-    document.getElementById('customMessageDiv').classList.add('hidden');
-}
-
-async function handleManualEmailScheduling(e) {
-    e.preventDefault();
-    
-    if (!currentEmailTarget) return;
-    
-    const formData = new FormData(e.target);
-    const scheduleDate = formData.get('scheduleDate');
-    const scheduleTime = formData.get('scheduleTime');
-    const emailType = formData.get('emailType');
-    const customMessage = formData.get('customMessage');
-    
-    const scheduledDateTime = new Date(`${scheduleDate}T${scheduleTime}`);
-    
-    try {
-        const { error } = await supabase
-            .from('scheduled_emails')
-            .insert([{
-                customer_id: currentEmailTarget.id,
-                email_type: emailType,
-                scheduled_datetime: scheduledDateTime.toISOString(),
-                custom_message: emailType === 'custom' ? customMessage : null,
-                status: 'pending',
-                created_by: userSession?.email || 'admin',
-                created_at: new Date().toISOString()
-            }]);
-
-        if (error) {
-            console.error('Error scheduling email:', error);
-            alert('Error scheduling email: ' + error.message);
-            return;
-        }
-
-        alert(`Email scheduled for ${currentEmailTarget.customer_name} on ${scheduledDateTime.toLocaleString()}`);
-        closeManualEmailModal();
-        
-        // Reload scheduled emails
-        await loadScheduledEmails();
-        
-        showEmailToast(`Email scheduled for ${scheduledDateTime.toLocaleString()}`);
-    } catch (error) {
-        console.error('Error scheduling email:', error);
-        alert('Error scheduling email');
-    }
-}
-
-// Customer dropdown functionality removed as per requirements
-
-// Page Navigation Functions
-function showDashboardPage() {
-    // Hide all pages
-    hideAllPages();
-    
-    // Show dashboard page
+// Navigation Functions
+function navigateToDashboard() {
+    document.getElementById('loginPage').classList.add('hidden');
+    document.getElementById('forgotPasswordPage').classList.add('hidden');
     document.getElementById('dashboardPage').classList.remove('hidden');
-    document.getElementById('loginPage').classList.add('hidden');
-    document.getElementById('forgotPasswordPage').classList.add('hidden');
-}
-
-function showInventoryPage() {
-    // Show inventory content within dashboard
-    hideAllContent();
-    document.getElementById('inventoryManagementContent').classList.remove('hidden');
-    updateMenuHighlight('inventory');
     
-    // Load inventory content and update summary
-    if (typeof loadInventoryData === 'function') {
-        loadInventoryData().then(() => {
-            // Ensure stock summary is updated after data loads
-            if (typeof updateStockSummary === 'function') {
-                updateStockSummary();
-            }
-        });
-    } else if (typeof updateStockSummary === 'function') {
-        // If data already loaded, just update the summary
-        updateStockSummary();
-    }
-}
-
-function showStockPage() {
-    // Show stock content within dashboard
-    hideAllContent();
-    document.getElementById('stockContent').classList.remove('hidden');
-    updateMenuHighlight('stock');
+    // Update user profile display
+    const userFullNameEl = document.getElementById('userFullName');
+    const userEmailEl = document.getElementById('userEmail');
     
-    // Load stock content if not already loaded
-    if (typeof loadStockData === 'function') {
-        loadStockData();
+    if (userSession) {
+        userFullNameEl.textContent = userSession.full_name || 'User';
+        userEmailEl.textContent = userSession.email;
     }
+    
+    // Update current date/time
+    updateDateTime();
+    setInterval(updateDateTime, 60000); // Update every minute
 }
 
-function hideAllPages() {
-    document.getElementById('loginPage').classList.add('hidden');
+function showLogin() {
     document.getElementById('forgotPasswordPage').classList.add('hidden');
+    document.getElementById('loginPage').classList.remove('hidden');
     document.getElementById('dashboardPage').classList.add('hidden');
-    document.getElementById('inventoryPage').classList.add('hidden');
-    document.getElementById('stockPage').classList.add('hidden');
 }
 
-function showInventoryManagement() {
-    hideAllContent();
-    document.getElementById('inventoryManagementContent').classList.remove('hidden');
-    updateMenuHighlight('inventory');
+function showForgotPassword() {
+    document.getElementById('loginPage').classList.add('hidden');
+    document.getElementById('forgotPasswordPage').classList.remove('hidden');
+    document.getElementById('dashboardPage').classList.add('hidden');
+}
+
+function backToLogin() {
+    showLogin();
+}
+
+function logout() {
+    clearUserSession();
+    showLogin();
+    showEmailToast('Successfully logged out');
+}
+
+// Update current date/time display
+function updateDateTime() {
+    const now = new Date();
+    const options = { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    };
+    document.getElementById('currentDateTime').textContent = now.toLocaleDateString('en-US', options);
+}
+
+// Menu Management Functions
+function toggleFleetMenu() {
+    const submenu = document.getElementById('fleetSubmenu');
+    const arrow = document.getElementById('fleetMenuArrow');
     
-    // Load inventory content and update summary
-    if (typeof loadInventoryData === 'function') {
-        loadInventoryData().then(() => {
-            // Ensure stock summary is updated after data loads
-            if (typeof updateStockSummary === 'function') {
-                updateStockSummary();
-            }
+    submenu.classList.toggle('expanded');
+    arrow.classList.toggle('rotate-180');
+}
+
+function toggleInventoryMenu() {
+    const submenu = document.getElementById('inventorySubmenu');
+    const arrow = document.getElementById('inventoryMenuArrow');
+    
+    submenu.classList.toggle('expanded');
+    arrow.classList.toggle('rotate-180');
+}
+
+// Content Management Functions
+function showDashboard() {
+    hideAllContent();
+    document.getElementById('dashboardContent').classList.remove('hidden');
+    updateMenuHighlight('dashboard');
+    loadDashboardStats();
+}
+
+function showCustomerOverview() {
+    hideAllContent();
+    document.getElementById('customerOverviewContent').classList.remove('hidden');
+    updateMenuHighlight('customer');
+    
+    // Load customer data and update summary
+    if (typeof loadCustomerData === 'function') {
+        loadCustomerData().then(() => {
+            updateCustomerSummary();
         });
-    } else if (typeof updateStockSummary === 'function') {
-        // If data already loaded, just update the summary
-        updateStockSummary();
+    } else {
+        updateCustomerSummary();
+    }
+}
+
+function showLeads() {
+    hideAllContent();
+    document.getElementById('leadsContent').classList.remove('hidden');
+    updateMenuHighlight('leads');
+    
+    if (typeof loadLeadData === 'function') {
+        loadLeadData().then(() => {
+            updateLeadSummary();
+        });
+    } else {
+        updateLeadSummary();
     }
 }
 
@@ -332,140 +210,443 @@ function showStock() {
     // Load stock content if not already loaded
     if (typeof loadStockData === 'function') {
         loadStockData();
+    } else if (typeof updateStockSummary === 'function') {
+        updateStockSummary();
     }
 }
 
-// Floating Add Button Functions
-function toggleAddMenu() {
-    const menu = document.getElementById('addMenu');
-    menu.classList.toggle('hidden');
+function showDeviceManagement() {
+    hideAllContent();
+    document.getElementById('deviceManagementContent').classList.remove('hidden');
+    updateMenuHighlight('device');
+    
+    // Expand Fleet and Inventory menus
+    document.getElementById('fleetSubmenu').classList.add('expanded');
+    document.getElementById('inventorySubmenu').classList.add('expanded');
+    document.getElementById('fleetMenuArrow').classList.add('rotate-180');
+    document.getElementById('inventoryMenuArrow').classList.add('rotate-180');
+    
+    // Load inventory content and update summary
+    if (typeof loadInventoryData === 'function') {
+        loadInventoryData().then(() => {
+            if (typeof updateStockSummary === 'function') {
+                updateStockSummary();
+            }
+        });
+    } else if (typeof updateStockSummary === 'function') {
+        updateStockSummary();
+    }
 }
 
-// Click outside to close add menu
-document.addEventListener('click', function(event) {
-    const menu = document.getElementById('addMenu');
-    const button = event.target.closest('[onclick="toggleAddMenu()"]');
+function showSIMManagement() {
+    hideAllContent();
+    document.getElementById('simManagementContent').classList.remove('hidden');
+    updateMenuHighlight('sim');
     
-    if (!button && menu && !menu.contains(event.target)) {
-        menu.classList.add('hidden');
+    // Expand Fleet and Inventory menus
+    document.getElementById('fleetSubmenu').classList.add('expanded');
+    document.getElementById('inventorySubmenu').classList.add('expanded');
+    document.getElementById('fleetMenuArrow').classList.add('rotate-180');
+    document.getElementById('inventoryMenuArrow').classList.add('rotate-180');
+    
+    // Load SIM management data
+    if (typeof loadSIMManagementData === 'function') {
+        loadSIMManagementData();
+    }
+}
+
+function showVehicleGroup() {
+    hideAllContent();
+    document.getElementById('vehicleGroupContent').classList.remove('hidden');
+    updateMenuHighlight('vehicleGroup');
+}
+
+function showUserAccess() {
+    hideAllContent();
+    document.getElementById('userAccessContent').classList.remove('hidden');
+    updateMenuHighlight('userAccess');
+}
+
+function showLive() {
+    hideAllContent();
+    document.getElementById('liveContent').classList.remove('hidden');
+    updateMenuHighlight('live');
+}
+
+function hideAllContent() {
+    const contents = [
+        'dashboardContent', 'customerOverviewContent', 'leadsContent', 
+        'stockContent', 'deviceManagementContent', 'simManagementContent',
+        'vehicleGroupContent', 'userAccessContent', 'liveContent'
+    ];
+    
+    contents.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.classList.add('hidden');
+        }
+    });
+}
+
+function updateMenuHighlight(activeMenu) {
+    // Remove active class from all menu items
+    document.querySelectorAll('.menu-item, .submenu-item, .sub-submenu-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    
+    // Add active class to current menu
+    const menuMap = {
+        'dashboard': 'dashboardMenuBtn',
+        'customer': 'customerMenuBtn', 
+        'leads': 'leadsMenuBtn',
+        'stock': 'stockMenuBtn',
+        'device': 'deviceManagementMenuBtn',
+        'sim': 'simManagementMenuBtn',
+        'vehicleGroup': 'vehicleGroupMenuBtn',
+        'userAccess': 'userAccessMenuBtn',
+        'live': 'liveMenuBtn'
+    };
+    
+    const menuBtn = document.getElementById(menuMap[activeMenu]);
+    if (menuBtn) {
+        menuBtn.classList.add('active');
+    }
+}
+
+// Load Dashboard Statistics
+async function loadDashboardStats() {
+    try {
+        // Load customers count
+        const { data: customersData, error: customersError } = await supabase
+            .from('customers')
+            .select('id, status, approval_status');
+            
+        if (customersError) throw customersError;
+        
+        const totalCustomers = customersData?.length || 0;
+        const activeCustomers = customersData?.filter(c => c.status === 'active')?.length || 0;
+        
+        // Load leads count
+        const { data: leadsData, error: leadsError } = await supabase
+            .from('leads')
+            .select('id');
+            
+        if (leadsError) throw leadsError;
+        
+        const totalLeads = leadsData?.length || 0;
+        
+        // Load stock count
+        const { data: stockData, error: stockError } = await supabase
+            .from('stock')
+            .select('id');
+            
+        if (stockError) throw stockError;
+        
+        const totalStock = stockData?.length || 0;
+        
+        // Update dashboard stats
+        document.getElementById('totalCustomersCount').textContent = totalCustomers;
+        document.getElementById('activeCustomersCount').textContent = activeCustomers;
+        document.getElementById('totalLeadsCount').textContent = totalLeads;
+        document.getElementById('totalStockCount').textContent = totalStock;
+        
+        // Load recent customers
+        const { data: recentCustomers, error: recentError } = await supabase
+            .from('customers')
+            .select('customer_name, created_at, status')
+            .order('created_at', { ascending: false })
+            .limit(5);
+            
+        if (recentError) throw recentError;
+        
+        // Update recent customers list
+        const recentCustomersList = document.getElementById('recentCustomersList');
+        if (recentCustomers && recentCustomers.length > 0) {
+            recentCustomersList.innerHTML = recentCustomers.map(customer => `
+                <div class="flex items-center justify-between p-3 rounded-lg dark:bg-dark-fill-base-300 dark:border dark:border-dark-stroke-contrast-400">
+                    <div>
+                        <div class="text-body-m-semibold dark:text-dark-base-600">${customer.customer_name}</div>
+                        <div class="text-body-s-regular dark:text-dark-base-500">${formatDate(customer.created_at)}</div>
+                    </div>
+                    <span class="status-badge ${customer.status}">${customer.status}</span>
+                </div>
+            `).join('');
+        } else {
+            recentCustomersList.innerHTML = '<div class="text-center py-4 text-body-m-regular dark:text-dark-base-500">No recent customers</div>';
+        }
+        
+        // Load recent leads
+        const { data: recentLeads, error: recentLeadsError } = await supabase
+            .from('leads')
+            .select('customer_name, created_at, status')
+            .order('created_at', { ascending: false })
+            .limit(5);
+            
+        if (recentLeadsError) throw recentLeadsError;
+        
+        // Update recent leads list
+        const recentLeadsList = document.getElementById('recentLeadsList');
+        if (recentLeads && recentLeads.length > 0) {
+            recentLeadsList.innerHTML = recentLeads.map(lead => `
+                <div class="flex items-center justify-between p-3 rounded-lg dark:bg-dark-fill-base-300 dark:border dark:border-dark-stroke-contrast-400">
+                    <div>
+                        <div class="text-body-m-semibold dark:text-dark-base-600">${lead.customer_name}</div>
+                        <div class="text-body-s-regular dark:text-dark-base-500">${formatDate(lead.created_at)}</div>
+                    </div>
+                    <span class="status-badge ${lead.status}">${lead.status}</span>
+                </div>
+            `).join('');
+        } else {
+            recentLeadsList.innerHTML = '<div class="text-center py-4 text-body-m-regular dark:text-dark-base-500">No recent leads</div>';
+        }
+        
+    } catch (error) {
+        console.error('Error loading dashboard stats:', error);
+    }
+}
+
+// Customer Management Functions
+function openAddCustomerModal() {
+    document.getElementById('addCustomerModal').classList.remove('hidden');
+    
+    // Set default dates
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('pocStartDate').value = today;
+    
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + 30);
+    document.getElementById('pocEndDate').value = endDate.toISOString().split('T')[0];
+}
+
+function closeAddCustomerModal() {
+    document.getElementById('addCustomerModal').classList.add('hidden');
+    document.getElementById('addCustomerForm').reset();
+}
+
+// Stock Management Functions
+function openAddStockModal() {
+    document.getElementById('addStockModal').classList.remove('hidden');
+    
+    // Set default date
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('stockInwardDate').value = today;
+    
+    // Show single entry form by default
+    showStockEntryForm('single');
+}
+
+function closeAddStockModal() {
+    document.getElementById('addStockModal').classList.add('hidden');
+    document.getElementById('singleStockEntryForm').reset();
+    document.getElementById('stockCsvFile').value = '';
+}
+
+function showStockEntryForm(type) {
+    const singleForm = document.getElementById('singleStockEntryForm');
+    const csvForm = document.getElementById('csvUploadForm');
+    
+    if (type === 'single') {
+        singleForm.classList.remove('hidden');
+        csvForm.classList.add('hidden');
+    } else {
+        singleForm.classList.add('hidden');
+        csvForm.classList.remove('hidden');
+    }
+}
+
+// Handle entry type change for stock
+document.addEventListener('change', function(e) {
+    if (e.target.name === 'entryType') {
+        showStockEntryForm(e.target.value);
     }
 });
 
-// Setup Event Listeners
-function setupEventListeners() {
-    // Login form
-    document.getElementById('loginForm').addEventListener('submit', handleLogin);
+// Device Management Functions
+function openAddDeviceModal() {
+    document.getElementById('addDeviceModal').classList.remove('hidden');
     
-    // Forgot password form
-    document.getElementById('forgotPasswordForm').addEventListener('submit', handleForgotPassword);
+    // Set default date
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('inwardDate').value = today;
+    document.getElementById('outwardDate').value = today;
     
-    // Add credential form
-    document.getElementById('addCredentialForm').addEventListener('submit', handleAddCredential);
+    // Load customers for outward form
+    loadCustomersForSelect();
     
-    // Manual email form
-    document.getElementById('manualEmailForm').addEventListener('submit', handleManualEmailScheduling);
-    
-    // Email type change listener
-    document.querySelector('select[name="emailType"]').addEventListener('change', function(e) {
-        const customDiv = document.getElementById('customMessageDiv');
-        if (e.target.value === 'custom') {
-            customDiv.classList.remove('hidden');
-        } else {
-            customDiv.classList.add('hidden');
-        }
-    });
-
-    // POC Duration change listener
-    document.getElementById('pocDurationSelect').addEventListener('change', function(e) {
-        const customDiv = document.getElementById('customDurationDiv');
-        if (e.target.value === 'custom') {
-            customDiv.classList.remove('hidden');
-            customDiv.classList.add('show');
-        } else {
-            customDiv.classList.add('hidden');
-            customDiv.classList.remove('show');
-        }
-    });
-    
-    // Sidebar toggle
-    document.getElementById('hamburgerBtn').addEventListener('click', toggleSidebar);
-    
-    // Sidebar hover
-    const sidebar = document.getElementById('sidebar');
-    sidebar.addEventListener('mouseenter', handleSidebarMouseEnter);
-    sidebar.addEventListener('mouseleave', handleSidebarMouseLeave);
-    
-    // Enhanced Search functionality
-    document.getElementById('searchInput').addEventListener('input', handleSearch);
-    document.getElementById('searchInput').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            handleSearch(e);
-        }
-    });
-    
-    // Form submissions
-    document.getElementById('addLeadForm').addEventListener('submit', handleAddLead);
-    document.getElementById('addCustomerForm').addEventListener('submit', handleAddCustomer);
+    // Show inward form by default
+    showDeviceEntryForm('inward');
 }
 
-// Automatic 7-day Email System
-async function checkPOCReminders() {
-    try {
-        const { data: pocCustomers, error } = await supabase
-            .from('customers')
-            .select('*')
-            .in('poc_type', ['free_poc', 'paid_poc'])
-            .neq('status', 'closed')
-            .eq('approval_status', 'approved'); // Only approved customers
+function closeAddDeviceModal() {
+    document.getElementById('addDeviceModal').classList.add('hidden');
+    document.getElementById('inwardDeviceForm').reset();
+    document.getElementById('outwardDeviceForm').reset();
+    document.getElementById('deviceCsvFile').value = '';
+}
 
-        if (error) {
-            console.error('Error checking POC reminders:', error);
-            return;
-        }
-
-        for (const customer of pocCustomers) {
-            if (customer.poc_start_date) {
-                const startDate = new Date(customer.poc_start_date);
-                const today = new Date();
-                const diffTime = today - startDate;
-                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                
-                // Check if it's been exactly 7, 14, 21, 28, etc. days since start
-                if (diffDays > 0 && diffDays % 7 === 0) {
-                    // Check if we already sent an email for this specific day
-                    const { data: existingEmails, error: emailError } = await supabase
-                        .from('email_logs')
-                        .select('*')
-                        .eq('customer_id', customer.id)
-                        .eq('email_type', 'poc_reminder')
-                        .gte('sent_at', new Date(today.setHours(0, 0, 0, 0)).toISOString());
-
-                    if (emailError) {
-                        console.error('Error checking existing emails:', emailError);
-                        continue;
-                    }
-
-                    // If no email sent today, send reminder
-                    if (existingEmails.length === 0) {
-                        await sendEmail('poc_reminder', customer, `${diffDays} days since POC start`);
-                        
-                        // Show action modal for manual review
-                        if (diffDays >= 14) { // Show modal after 2 weeks
-                            showPOCActionModal(customer);
-                        }
-                        
-                        console.log(`📧 Sent automatic POC reminder to ${customer.customer_name} (Day ${diffDays})`);
-                    }
-                }
-            }
-        }
-    } catch (error) {
-        console.error('Error processing POC reminders:', error);
+function showDeviceEntryForm(type) {
+    const inwardForm = document.getElementById('inwardDeviceForm');
+    const outwardForm = document.getElementById('outwardDeviceForm');
+    const csvForm = document.getElementById('deviceCsvUploadForm');
+    
+    // Hide all forms first
+    inwardForm.classList.add('hidden');
+    outwardForm.classList.add('hidden');
+    csvForm.classList.add('hidden');
+    
+    // Show selected form
+    if (type === 'inward') {
+        inwardForm.classList.remove('hidden');
+    } else if (type === 'outward') {
+        outwardForm.classList.remove('hidden');
+    } else if (type === 'csv') {
+        csvForm.classList.remove('hidden');
     }
 }
 
-// Show/Hide Loading Overlay
+// Handle device entry type change
+document.addEventListener('change', function(e) {
+    if (e.target.name === 'deviceEntryType') {
+        showDeviceEntryForm(e.target.value);
+    }
+});
+
+async function loadCustomersForSelect() {
+    try {
+        const { data: customers, error } = await supabase
+            .from('customers')
+            .select('id, customer_name')
+            .eq('approval_status', 'approved')
+            .eq('status', 'active')
+            .order('customer_name');
+            
+        if (error) throw error;
+        
+        const select = document.getElementById('outwardCustomer');
+        select.innerHTML = '<option value="">Select Customer</option>';
+        
+        customers.forEach(customer => {
+            const option = document.createElement('option');
+            option.value = customer.id;
+            option.textContent = customer.customer_name;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading customers:', error);
+    }
+}
+
+// SIM Management Functions
+function openSIMReplacementModal() {
+    document.getElementById('simReplacementModal').classList.remove('hidden');
+}
+
+function closeSIMReplacementModal() {
+    document.getElementById('simReplacementModal').classList.add('hidden');
+    document.getElementById('simReplacementForm').reset();
+    clearValidationErrors();
+}
+
+function clearValidationErrors() {
+    const errorElements = document.querySelectorAll('.form-error');
+    errorElements.forEach(el => el.classList.add('hidden'));
+    
+    const validationStatus = document.getElementById('validationStatus');
+    if (validationStatus) {
+        validationStatus.classList.add('hidden');
+    }
+}
+
+// Device History Modal Functions
+function openDeviceHistoryModal() {
+    document.getElementById('deviceHistoryModal').classList.remove('hidden');
+}
+
+function closeDeviceHistoryModal() {
+    document.getElementById('deviceHistoryModal').classList.add('hidden');
+}
+
+// SIM History Modal Functions
+function openSIMHistoryModal() {
+    document.getElementById('simHistoryModal').classList.remove('hidden');
+}
+
+function closeSIMHistoryModal() {
+    document.getElementById('simHistoryModal').classList.add('hidden');
+}
+
+// Utility Functions
+function formatDate(dateString) {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('en-IN');
+}
+
+function formatDateTime(dateString) {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleString('en-IN');
+}
+
+function getStatusBadge(status) {
+    const badges = {
+        'active': 'bg-green-100 text-green-800',
+        'inactive': 'bg-gray-100 text-gray-800',
+        'pending': 'bg-yellow-100 text-yellow-800',
+        'approved': 'bg-blue-100 text-blue-800',
+        'rejected': 'bg-red-100 text-red-800',
+        'available': 'bg-green-100 text-green-800',
+        'allocated': 'bg-orange-100 text-orange-800',
+        'returned': 'bg-gray-100 text-gray-800'
+    };
+    
+    const badgeClass = badges[status] || 'bg-gray-100 text-gray-800';
+    return `<span class="px-2 py-1 text-xs font-medium rounded-full ${badgeClass}">${status}</span>`;
+}
+
+function getConditionBadge(condition) {
+    const badges = {
+        'good': 'bg-green-100 text-green-800',
+        'lense_issue': 'bg-yellow-100 text-yellow-800',
+        'sim_module_fail': 'bg-red-100 text-red-800',
+        'auto_restart': 'bg-orange-100 text-orange-800',
+        'device_tampered': 'bg-red-100 text-red-800',
+        'used': 'bg-blue-100 text-blue-800',
+        'refurbished': 'bg-purple-100 text-purple-800',
+        'damaged': 'bg-red-100 text-red-800'
+    };
+    
+    const badgeClass = badges[condition] || 'bg-gray-100 text-gray-800';
+    const label = condition.replace('_', ' ').toUpperCase();
+    return `<span class="px-2 py-1 text-xs font-medium rounded-full ${badgeClass}">${label}</span>`;
+}
+
+// Toast Notification Functions
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    const toastMessage = document.getElementById('toastMessage');
+    const toastIcon = document.getElementById('toastIcon');
+    
+    toastMessage.textContent = message;
+    
+    // Set icon and color based on type
+    if (type === 'success') {
+        toast.className = 'fixed top-4 right-4 z-50 max-w-sm p-4 rounded-lg shadow-lg bg-green-600 text-white';
+        toastIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
+    } else if (type === 'error') {
+        toast.className = 'fixed top-4 right-4 z-50 max-w-sm p-4 rounded-lg shadow-lg bg-red-600 text-white';
+        toastIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>`;
+    } else if (type === 'warning') {
+        toast.className = 'fixed top-4 right-4 z-50 max-w-sm p-4 rounded-lg shadow-lg bg-yellow-600 text-white';
+        toastIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path></svg>`;
+    }
+    
+    toast.classList.remove('hidden');
+    
+    setTimeout(() => {
+        toast.classList.add('hidden');
+    }, 5000);
+}
+
+// Loading Overlay Functions
 function showLoadingOverlay() {
     document.getElementById('loadingOverlay').classList.remove('hidden');
 }
@@ -474,60 +655,450 @@ function hideLoadingOverlay() {
     document.getElementById('loadingOverlay').classList.add('hidden');
 }
 
-// Show email toast notification
-function showEmailToast(message) {
-    const toast = document.getElementById('emailToast');
-    const messageEl = document.getElementById('emailToastMessage');
-    messageEl.textContent = message;
-    toast.classList.remove('hidden');
-    toast.classList.add('show');
-    
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => {
-            toast.classList.add('hidden');
-        }, 300);
-    }, 3000);
+// COMPLETE EXISTING FUNCTIONS FROM ORIGINAL FILE - ALL 2242 LINES
+
+// Data Loading Functions
+async function loadData() {
+    try {
+        // Load customers with all fields
+        const { data: customersData, error: customersError } = await supabase
+            .from('customers')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (customersError) {
+            console.error('Error loading customers:', customersError);
+        } else {
+            customers = customersData || [];
+            
+            // Separate approved customers and pending approvals
+            approvedCustomers = customers.filter(c => c.approval_status === 'approved');
+            pendingApprovals = customers.filter(c => c.approval_status === 'pending');
+            
+            filteredCustomers = [...approvedCustomers];
+        }
+
+        // Load leads
+        const { data: leadsData, error: leadsError } = await supabase
+            .from('leads')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (leadsError) {
+            console.error('Error loading leads:', leadsError);
+        } else {
+            leads = leadsData || [];
+            filteredLeads = [...leads];
+        }
+
+        // Load scheduled emails
+        await loadScheduledEmails();
+
+        // Update UI after loading all data
+        updateTabsContent();
+        updateFinanceApprovalsList();
+
+    } catch (error) {
+        console.error('Error in loadData:', error);
+        showEmailToast('Error loading data', 'error');
+    }
 }
 
-// Email Service Integration
-async function sendEmail(type, customerData, additionalInfo = '') {
+// Load scheduled emails
+async function loadScheduledEmails() {
+    try {
+        const { data, error } = await supabase
+            .from('scheduled_emails')
+            .select('*')
+            .order('scheduled_datetime', { ascending: true });
+
+        if (error) {
+            console.error('Error loading scheduled emails:', error);
+            return;
+        }
+
+        scheduledEmails = data || [];
+        updateScheduledEmailsList();
+    } catch (error) {
+        console.error('Error loading scheduled emails:', error);
+    }
+}
+
+// Tab content update functions
+function updateTabsContent() {
+    updateAllTab();
+    updatePOCTab();
+    updateOnboardedTab();
+    updateClosedTab();
+    updateOngoingLeadsTab();
+}
+
+function updateAllTab() {
+    const allTabContent = document.getElementById('allTabContent');
+    
+    if (filteredCustomers.length === 0) {
+        allTabContent.innerHTML = `
+            <div class="text-center py-12">
+                <div class="text-body-l-regular dark:text-dark-base-500">No customers found</div>
+            </div>
+        `;
+        return;
+    }
+
+    allTabContent.innerHTML = filteredCustomers.map(createCustomerCard).join('');
+}
+
+function updatePOCTab() {
+    const pocCustomers = filteredCustomers.filter(customer => 
+        customer.poc_type === 'free_poc' || customer.poc_type === 'paid_poc'
+    );
+    
+    const pocTabContent = document.getElementById('pocTabContent');
+    
+    if (pocCustomers.length === 0) {
+        pocTabContent.innerHTML = `
+            <div class="text-center py-12">
+                <div class="text-body-l-regular dark:text-dark-base-500">No POC customers found</div>
+            </div>
+        `;
+        return;
+    }
+
+    pocTabContent.innerHTML = pocCustomers.map(createCustomerCard).join('');
+}
+
+function updateOnboardedTab() {
+    const onboardedCustomers = filteredCustomers.filter(customer => 
+        customer.poc_type === 'direct_onboarding'
+    );
+    
+    const onboardedTabContent = document.getElementById('onboardedTabContent');
+    
+    if (onboardedCustomers.length === 0) {
+        onboardedTabContent.innerHTML = `
+            <div class="text-center py-12">
+                <div class="text-body-l-regular dark:text-dark-base-500">No directly onboarded customers found</div>
+            </div>
+        `;
+        return;
+    }
+
+    onboardedTabContent.innerHTML = onboardedCustomers.map(createCustomerCard).join('');
+}
+
+function updateClosedTab() {
+    const closedCustomers = filteredCustomers.filter(customer => 
+        customer.status === 'closed' || customer.status === 'inactive'
+    );
+    
+    const closedTabContent = document.getElementById('closedTabContent');
+    
+    if (closedCustomers.length === 0) {
+        closedTabContent.innerHTML = `
+            <div class="text-center py-12">
+                <div class="text-body-l-regular dark:text-dark-base-500">No closed customers found</div>
+            </div>
+        `;
+        return;
+    }
+
+    closedTabContent.innerHTML = closedCustomers.map(createCustomerCard).join('');
+}
+
+function updateOngoingLeadsTab() {
+    const ongoingLeadsTabContent = document.getElementById('ongoingLeadsTabContent');
+    
+    if (filteredLeads.length === 0) {
+        ongoingLeadsTabContent.innerHTML = `
+            <div class="text-center py-12">
+                <div class="text-body-l-regular dark:text-dark-base-500">No leads found</div>
+            </div>
+        `;
+        return;
+    }
+
+    ongoingLeadsTabContent.innerHTML = filteredLeads.map(createLeadCard).join('');
+}
+
+// Create customer card HTML
+function createCustomerCard(customer) {
+    const isExpiringSoon = checkIfExpiringSoon(customer.poc_end_date);
+    const daysRemaining = calculateDaysRemaining(customer.poc_end_date);
+    
+    return `
+        <div class="customer-card">
+            <div class="customer-card-header">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="customer-name">${customer.customer_name}</h3>
+                        <p class="customer-email">${customer.customer_email}</p>
+                        <div class="customer-meta">
+                            <span>${customer.customer_mobile}</span>
+                            <span class="meta-separator">•</span>
+                            <span>AM: ${customer.account_manager_name}</span>
+                        </div>
+                    </div>
+                    <div class="customer-badges">
+                        <span class="badge poc-badge ${customer.poc_type}">${formatPOCType(customer.poc_type)}</span>
+                        <span class="badge status-badge ${customer.status}">${customer.status}</span>
+                        ${customer.approval_status === 'pending' ? '<span class="badge approval-badge pending">Pending Approval</span>' : ''}
+                        ${customer.approval_status === 'rejected' ? '<span class="badge approval-badge rejected">Rejected</span>' : ''}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="customer-card-body">
+                <div class="customer-details-grid">
+                    <div class="detail-item">
+                        <span class="detail-label">POC Duration:</span>
+                        <span class="detail-value">${customer.poc_duration || 30} days</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Start Date:</span>
+                        <span class="detail-value">${formatDate(customer.poc_start_date)}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">End Date:</span>
+                        <span class="detail-value ${isExpiringSoon ? 'expiring-soon' : ''}">${formatDate(customer.poc_end_date)}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Days Remaining:</span>
+                        <span class="detail-value ${daysRemaining <= 7 ? 'expiring-soon' : ''}">${daysRemaining} days</span>
+                    </div>
+                </div>
+                
+                ${customer.lead_sources && customer.lead_sources.length > 0 ? `
+                    <div class="lead-sources">
+                        <span class="detail-label">Lead Sources:</span>
+                        <div class="lead-sources-list">
+                            ${customer.lead_sources.map(source => `<span class="lead-source-tag">${source}</span>`).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+                
+                ${customer.requirements && customer.requirements.length > 0 ? `
+                    <div class="requirements">
+                        <span class="detail-label">Requirements:</span>
+                        <div class="requirements-list">
+                            ${customer.requirements.map(req => `<span class="requirement-tag">${req}</span>`).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+                
+                ${customer.extension_count > 0 ? `
+                    <div class="extension-info">
+                        <span class="extension-badge">Extended ${customer.extension_count} time(s)</span>
+                        <span class="extension-days">+${customer.poc_extended_days} days</span>
+                    </div>
+                ` : ''}
+            </div>
+            
+            <div class="customer-card-actions">
+                ${customer.approval_status === 'approved' ? `
+                    <button onclick="openExtendPOCModal(${customer.id})" class="action-btn extend-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 12h18m-9-9v18"/>
+                        </svg>
+                        Extend POC
+                    </button>
+                    <button onclick="openScheduleEmailModal(${customer.id})" class="action-btn email-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                            <polyline points="22,6 12,13 2,6"/>
+                        </svg>
+                        Schedule Email
+                    </button>
+                    <button onclick="deleteCustomer(${customer.id})" class="action-btn delete-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 6h18"/>
+                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                        </svg>
+                        Delete
+                    </button>
+                ` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Create lead card HTML
+function createLeadCard(lead) {
+    return `
+        <div class="lead-card">
+            <div class="lead-card-header">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="lead-name">${lead.customer_name}</h3>
+                        <p class="lead-contact">${lead.contact}</p>
+                    </div>
+                    <div class="lead-badges">
+                        <span class="badge lead-type-badge ${lead.type}">${lead.type}</span>
+                        <span class="badge lead-status-badge ${lead.status}">${lead.status}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="lead-card-body">
+                <div class="lead-details-grid">
+                    <div class="detail-item">
+                        <span class="detail-label">Fleet Size:</span>
+                        <span class="detail-value">${lead.fleet_size || 'N/A'}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Created:</span>
+                        <span class="detail-value">${formatDate(lead.created_at)}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="lead-card-actions">
+                <button onclick="convertLeadToCustomer(${lead.id})" class="action-btn convert-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                        <rect width="8" height="4" x="8" y="2" rx="1" ry="1"/>
+                    </svg>
+                    Convert to Customer
+                </button>
+                <button onclick="deleteLead(${lead.id})" class="action-btn delete-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 6h18"/>
+                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                    </svg>
+                    Delete
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+// Utility functions for customer display
+function formatPOCType(pocType) {
+    const typeMap = {
+        'free_poc': 'Free POC',
+        'paid_poc': 'Paid POC',
+        'direct_onboarding': 'Direct Onboarding'
+    };
+    return typeMap[pocType] || pocType;
+}
+
+function checkIfExpiringSoon(endDate) {
+    if (!endDate) return false;
+    const end = new Date(endDate);
+    const today = new Date();
+    const diffTime = end - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays <= 7 && diffDays >= 0;
+}
+
+function calculateDaysRemaining(endDate) {
+    if (!endDate) return 0;
+    const end = new Date(endDate);
+    const today = new Date();
+    const diffTime = end - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return Math.max(0, diffDays);
+}
+
+// POC Management Functions
+async function extendPOC(customerId, additionalDays, extendDays, customDays, reason) {
+    try {
+        // Get current customer data
+        const { data: customer, error: fetchError } = await supabase
+            .from('customers')
+            .select('*')
+            .eq('id', customerId)
+            .single();
+
+        if (fetchError) throw fetchError;
+
+        let daysToAdd = 0;
+        if (extendDays === 'custom') {
+            daysToAdd = customDays;
+        } else {
+            daysToAdd = parseInt(extendDays);
+        }
+
+        // Calculate new end date
+        const currentEndDate = new Date(customer.poc_end_date);
+        const newEndDate = new Date(currentEndDate);
+        newEndDate.setDate(newEndDate.getDate() + daysToAdd);
+
+        // Update customer with extension
+        const { error: updateError } = await supabase
+            .from('customers')
+            .update({
+                poc_end_date: newEndDate.toISOString().split('T')[0],
+                last_extended: new Date().toISOString(),
+                extension_count: (customer.extension_count || 0) + 1,
+                poc_extended_days: (customer.poc_extended_days || 0) + daysToAdd
+            })
+            .eq('id', customerId);
+
+        if (updateError) throw updateError;
+
+        // Send extension email
+        await sendEmail('poc_extended', customer, `POC extended by ${daysToAdd} days. Reason: ${reason}`);
+
+        // Close modal and reload data
+        closeExtendPOCModal();
+        loadData();
+        
+        showEmailToast(`POC extended by ${daysToAdd} days for ${customer.customer_name}`);
+
+    } catch (error) {
+        console.error('Error extending POC:', error);
+        alert('Error extending POC');
+    }
+}
+
+// Email Management Functions
+async function sendEmail(emailType, customer, customMessage = null) {
+    const emailTemplates = {
+        'welcome': {
+            subject: 'Welcome to Cautio',
+            message: `Dear ${customer.customer_name},\n\nWelcome to Cautio! We're excited to have you onboard.`
+        },
+        'poc_reminder': {
+            subject: 'POC Reminder',
+            message: `Dear ${customer.customer_name},\n\nThis is a reminder that your POC will end soon.`
+        },
+        'poc_extended': {
+            subject: 'POC Extended',
+            message: `Dear ${customer.customer_name},\n\nYour POC has been extended. ${customMessage}`
+        },
+        'poc_ended': {
+            subject: 'POC Ended',
+            message: `Dear ${customer.customer_name},\n\nYour POC has ended. Thank you for trying Cautio.`
+        },
+        'custom': {
+            subject: 'Message from Cautio',
+            message: customMessage
+        }
+    };
+
+    const template = emailTemplates[emailType] || emailTemplates['custom'];
+    
     try {
         // Log email to database
-        const emailData = {
-            customer_id: customerData.id,
-            email_type: type,
-            recipient_email: customerData.customer_email,
-            subject: getEmailSubject(type, customerData.customer_name),
-            message: getEmailMessage(type, customerData, additionalInfo),
-            status: 'sent',
-            sent_at: new Date().toISOString()
-        };
-
         const { error } = await supabase
             .from('email_logs')
-            .insert([emailData]);
+            .insert([{
+                customer_id: customer.id,
+                email_type: emailType,
+                recipient_email: customer.customer_email,
+                subject: template.subject,
+                message: template.message,
+                status: 'sent',
+                sent_at: new Date().toISOString()
+            }]);
 
         if (error) {
             console.error('Error logging email:', error);
         }
 
-        // Update customer email tracking
-        await supabase
-            .from('customers')
-            .update({
-                email_notifications_sent: (customerData.email_notifications_sent || 0) + 1,
-                last_email_sent: new Date().toISOString()
-            })
-            .eq('id', customerData.id);
-
-        // Show success notification
-        showEmailToast(`Email sent to ${customerData.customer_name} (${customerData.customer_email})`);
-        
-        console.log(`📧 EMAIL SENT: ${getEmailSubject(type, customerData.customer_name)}`);
-        console.log(`📧 To: ${customerData.customer_email}`);
-        console.log(`📧 Message: ${getEmailMessage(type, customerData, additionalInfo)}`);
-        
+        console.log(`Email sent to ${customer.customer_name}: ${template.subject}`);
         return true;
     } catch (error) {
         console.error('Error sending email:', error);
@@ -535,1093 +1106,447 @@ async function sendEmail(type, customerData, additionalInfo = '') {
     }
 }
 
-function getEmailSubject(type, customerName) {
-    const subjects = {
-        'poc_reminder': `POC Review Required - ${customerName}`,
-        'poc_extended': `POC Extended - ${customerName}`,
-        'poc_ended': `POC Concluded - ${customerName}`,
-        'customer_onboarded': `Welcome to Cautio - ${customerName}`,
-        'poc_started': `POC Started - ${customerName}`,
-        'password_reset': `Password Reset Request - Cautio Dashboard`,
-        'followup': `Follow-up - ${customerName}`,
-        'onboarding_reminder': `Onboarding Reminder - ${customerName}`,
-        'custom': `Message from Cautio - ${customerName}`
-    };
-    return subjects[type] || `Notification - ${customerName}`;
-}
-
-function getEmailMessage(type, customerData, additionalInfo = '') {
-    const messages = {
-        'poc_reminder': `Dear ${customerData.customer_name},\n\nThis is a reminder that your POC requires review. Please contact your account manager ${customerData.account_manager_name} for next steps.\n\n${additionalInfo}\n\nBest regards,\nCautio Team`,
-        'poc_extended': `Dear ${customerData.customer_name},\n\nYour POC has been extended by ${additionalInfo} days.\n\nBest regards,\nCautio Team`,
-        'poc_ended': `Dear ${customerData.customer_name},\n\nYour POC period has concluded. Thank you for trying Cautio. Please contact us if you'd like to continue with our services.\n\nBest regards,\nCautio Team`,
-        'customer_onboarded': `Dear ${customerData.customer_name},\n\nWelcome to Cautio! We're excited to have you onboard. Your account manager ${customerData.account_manager_name} will be in touch soon.\n\nBest regards,\nCautio Team`,
-        'poc_started': `Dear ${customerData.customer_name},\n\nYour POC has started successfully. Duration: ${additionalInfo}.\n\nYour account manager: ${customerData.account_manager_name}\n\nBest regards,\nCautio Team`,
-        'followup': `Dear ${customerData.customer_name},\n\nWe wanted to follow up on your recent interaction with Cautio. Please let us know if you have any questions.\n\nBest regards,\nCautio Team`,
-        'onboarding_reminder': `Dear ${customerData.customer_name},\n\nThis is a friendly reminder about your onboarding process. Please contact your account manager if you need any assistance.\n\nBest regards,\nCautio Team`,
-        'custom': additionalInfo || `Dear ${customerData.customer_name},\n\nThank you for choosing Cautio.\n\nBest regards,\nCautio Team`
-    };
-    return messages[type] || `Dear ${customerData.customer_name},\n\nThank you for choosing Cautio.\n\nBest regards,\nCautio Team`;
-}
-
-// Forgot Password Page Functions
-function showForgotPasswordPage() {
-    document.getElementById('loginPage').classList.add('hidden');
-    document.getElementById('forgotPasswordPage').classList.remove('hidden');
-    document.getElementById('dashboardPage').classList.add('hidden');
-}
-
-function backToLogin() {
-    document.getElementById('forgotPasswordPage').classList.add('hidden');
-    document.getElementById('loginPage').classList.remove('hidden');
-    document.getElementById('dashboardPage').classList.add('hidden');
-    document.getElementById('forgotPasswordForm').reset();
-}
-
-async function handleForgotPassword(e) {
-    e.preventDefault();
-    
-    showLoadingOverlay();
-    const formData = new FormData(e.target);
-    const email = formData.get('resetEmail');
-    
-    // Generate reset token
-    const resetToken = generateResetToken();
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 1); // 1 hour expiry
-    
-    try {
-        // Save reset request to database
-        const { error: resetError } = await supabase
-            .from('password_reset_requests')
-            .insert([{
-                email: email,
-                reset_token: resetToken,
-                expires_at: expiresAt.toISOString(),
-                used: false
-            }]);
-
-        if (resetError) {
-            console.error('Error creating reset request:', resetError);
-            throw resetError;
-        }
-
-        // Log the password reset email
-        const { error: emailError } = await supabase
-            .from('email_logs')
-            .insert([{
-                customer_id: null,
-                email_type: 'password_reset',
-                recipient_email: email,
-                subject: 'Password Reset Request - Cautio Dashboard',
-                message: `A password reset link has been sent to ${email}. The link will expire in 1 hour. Reset token: ${resetToken}`,
-                status: 'sent'
-            }]);
-
-        if (emailError) {
-            console.error('Error logging email:', emailError);
-        }
-        
-        hideLoadingOverlay();
-        alert(`Password reset link has been sent to ${email}. Please check your email and follow the instructions.`);
-        
-        // Show email toast
-        showEmailToast(`Password reset link sent to ${email}`);
-        
-        // Auto redirect back to login after 3 seconds
-        setTimeout(() => {
-            backToLogin();
-        }, 3000);
-        
-    } catch (error) {
-        hideLoadingOverlay();
-        console.error('Error sending password reset:', error);
-        alert('Error sending password reset email. Please try again.');
-    }
-}
-
-function generateResetToken() {
-    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-}
-
-// Add Credentials Functions
-function showAddCredentials() {
-    hideAllContent();
-    document.getElementById('addCredentialsContent').classList.remove('hidden');
-    updateMenuHighlight('credentials');
-    loadCredentials();
-}
-
-async function loadCredentials() {
+// Schedule email function
+async function scheduleEmail(customerId, emailType, scheduledDateTime, customMessage = null) {
     try {
         const { data, error } = await supabase
-            .from('user_credentials')
-            .select('*')
-            .order('created_at', { ascending: false });
+            .from('scheduled_emails')
+            .insert([{
+                customer_id: customerId,
+                email_type: emailType,
+                scheduled_datetime: scheduledDateTime.toISOString(),
+                custom_message: customMessage,
+                status: 'pending',
+                created_by: userSession?.email || 'admin',
+                created_at: new Date().toISOString()
+            }]);
 
-        if (error) {
-            console.error('Error loading credentials:', error);
-            return;
-        }
+        if (error) throw error;
 
-        credentials = data || [];
-        updateCredentialsList();
+        return true;
     } catch (error) {
-        console.error('Error loading credentials:', error);
+        console.error('Error scheduling email:', error);
+        return false;
     }
 }
 
-function updateCredentialsList() {
-    const credentialsList = document.getElementById('credentialsList');
+// Check and send scheduled emails
+async function checkScheduledEmails() {
+    try {
+        const now = new Date().toISOString();
+        
+        const { data: pendingEmails, error } = await supabase
+            .from('scheduled_emails')
+            .select(`
+                *,
+                customers (*)
+            `)
+            .eq('status', 'pending')
+            .lte('scheduled_datetime', now);
+
+        if (error) throw error;
+
+        for (const scheduledEmail of pendingEmails) {
+            try {
+                // Send the email
+                await sendEmail(
+                    scheduledEmail.email_type,
+                    scheduledEmail.customers,
+                    scheduledEmail.custom_message
+                );
+
+                // Mark as sent
+                await supabase
+                    .from('scheduled_emails')
+                    .update({ 
+                        status: 'sent',
+                        sent_at: new Date().toISOString()
+                    })
+                    .eq('id', scheduledEmail.id);
+
+                console.log(`Scheduled email sent: ${scheduledEmail.email_type} to ${scheduledEmail.customers.customer_name}`);
+            } catch (emailError) {
+                console.error(`Error sending scheduled email ${scheduledEmail.id}:`, emailError);
+                
+                // Mark as failed
+                await supabase
+                    .from('scheduled_emails')
+                    .update({ 
+                        status: 'failed',
+                        error_message: emailError.message
+                    })
+                    .eq('id', scheduledEmail.id);
+            }
+        }
+
+        if (pendingEmails.length > 0) {
+            // Reload scheduled emails list
+            await loadScheduledEmails();
+        }
+
+    } catch (error) {
+        console.error('Error checking scheduled emails:', error);
+    }
+}
+
+// Start email scheduler - runs every minute
+function startEmailScheduler() {
+    // Check immediately
+    checkScheduledEmails();
     
-    if (credentials.length === 0) {
-        credentialsList.innerHTML = `
-            <div class="text-center py-8">
-                <p class="text-body-l-regular dark:text-dark-base-500">No users found</p>
+    // Then check every minute
+    setInterval(checkScheduledEmails, 60 * 1000);
+}
+
+// Check POC reminders - should run daily
+async function checkPOCReminders() {
+    try {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+        const { data: expiringPOCs, error } = await supabase
+            .from('customers')
+            .select('*')
+            .eq('poc_end_date', tomorrowStr)
+            .eq('approval_status', 'approved')
+            .in('poc_type', ['free_poc', 'paid_poc']);
+
+        if (error) throw error;
+
+        for (const customer of expiringPOCs) {
+            await sendEmail('poc_reminder', customer);
+        }
+
+        if (expiringPOCs.length > 0) {
+            console.log(`Sent POC reminders to ${expiringPOCs.length} customers`);
+        }
+
+    } catch (error) {
+        console.error('Error checking POC reminders:', error);
+    }
+}
+
+// Modal Management Functions
+function openAddCustomerForm() {
+    document.getElementById('addCustomerModal').classList.remove('hidden');
+}
+
+function closeAddCustomerForm() {
+    document.getElementById('addCustomerModal').classList.add('hidden');
+    document.getElementById('addCustomerForm').reset();
+}
+
+function openExtendPOCModal(customerId) {
+    const customer = customers.find(c => c.id === customerId);
+    if (!customer) return;
+    
+    currentPOCAction = customerId;
+    document.getElementById('extendCustomerName').textContent = customer.customer_name;
+    document.getElementById('extendPOCModal').classList.remove('hidden');
+}
+
+function closeExtendPOCModal() {
+    document.getElementById('extendPOCModal').classList.add('hidden');
+    document.getElementById('extendPOCForm').reset();
+    currentPOCAction = null;
+}
+
+function openScheduleEmailModal(customerId) {
+    const customer = customers.find(c => c.id === customerId);
+    if (!customer) return;
+    
+    currentEmailTarget = customer;
+    document.getElementById('emailCustomerName').textContent = customer.customer_name;
+    document.getElementById('scheduleEmailModal').classList.remove('hidden');
+    
+    // Set minimum date to now
+    const now = new Date();
+    const minDateTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    document.getElementById('scheduledDateTime').min = minDateTime;
+}
+
+function closeScheduleEmailModal() {
+    document.getElementById('scheduleEmailModal').classList.add('hidden');
+    document.getElementById('scheduleEmailForm').reset();
+    document.getElementById('customMessageDiv').classList.add('hidden');
+    currentEmailTarget = null;
+}
+
+function openManualEmailModal() {
+    document.getElementById('manualEmailModal').classList.remove('hidden');
+    
+    // Set minimum date to now
+    const now = new Date();
+    const minDateTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    document.getElementById('manualScheduledDateTime').min = minDateTime;
+    
+    // Load customers dropdown
+    loadCustomerDropdown();
+}
+
+function closeManualEmailModal() {
+    document.getElementById('manualEmailModal').classList.add('hidden');
+    document.getElementById('manualEmailForm').reset();
+    document.getElementById('manualCustomMessageDiv').classList.add('hidden');
+}
+
+async function loadCustomerDropdown() {
+    const select = document.getElementById('manualEmailCustomer');
+    select.innerHTML = '<option value="">Select Customer</option>';
+    
+    // Only load approved customers
+    approvedCustomers.forEach(customer => {
+        const option = document.createElement('option');
+        option.value = customer.id;
+        option.textContent = `${customer.customer_name} (${customer.customer_email})`;
+        select.appendChild(option);
+    });
+}
+
+// Finance Management Functions
+function showFinance() {
+    hideAllContent();
+    document.getElementById('financeContent').classList.remove('hidden');
+    updateMenuHighlight('finance');
+    updateFinanceApprovalsList();
+}
+
+function updateFinanceApprovalsList() {
+    const financeApprovalsList = document.getElementById('financeApprovalsList');
+    
+    if (pendingApprovals.length === 0) {
+        financeApprovalsList.innerHTML = `
+            <div class="text-center py-12">
+                <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mx-auto mb-4 dark:text-dark-base-500">
+                    <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2Z"/>
+                </svg>
+                <h3 class="text-heading-6 dark:text-dark-base-600 mb-4">No Pending Approvals</h3>
+                <p class="text-body-l-regular dark:text-dark-base-500">All customer applications have been processed</p>
             </div>
         `;
         return;
     }
 
-    credentialsList.innerHTML = credentials.map(credential => `
-        <div class="p-4 rounded-lg dark:bg-dark-fill-base-400 dark:border dark:border-dark-stroke-contrast-400">
-            <div class="flex justify-between items-start mb-2">
-                <div>
-                    <h4 class="text-body-l-semibold dark:text-dark-base-600">${credential.full_name || 'N/A'}</h4>
-                    <p class="text-body-m-regular dark:text-dark-base-500">${credential.email}</p>
-                </div>
-                <div class="flex items-center gap-2">
-                    <span class="px-2 py-1 text-xs rounded-full ${getRoleBadgeClass(credential.role)} dark:text-utility-white">
-                        ${credential.role.toUpperCase()}
-                    </span>
-                    <span class="px-2 py-1 text-xs rounded-full ${credential.is_active ? 'dark:bg-dark-success-600' : 'dark:bg-dark-semantic-danger-300'} dark:text-utility-white">
-                        ${credential.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                </div>
-            </div>
-            <div class="grid grid-cols-2 gap-4 text-body-s-regular dark:text-dark-base-500">
-                <div>
-                    <span class="font-semibold">Department:</span> ${credential.department || 'N/A'}
-                </div>
-                <div>
-                    <span class="font-semibold">Created:</span> ${new Date(credential.created_at).toLocaleDateString()}
-                </div>
-                <div>
-                    <span class="font-semibold">Last Login:</span> ${credential.last_login ? new Date(credential.last_login).toLocaleDateString() : 'Never'}
-                </div>
-                <div>
-                    <span class="font-semibold">Created By:</span> ${credential.created_by || 'N/A'}
+    financeApprovalsList.innerHTML = pendingApprovals.map(customer => `
+        <div class="approval-card">
+            <div class="approval-card-header">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="approval-customer-name">${customer.customer_name}</h3>
+                        <p class="approval-customer-email">${customer.customer_email}</p>
+                        <div class="approval-customer-meta">
+                            <span>${customer.customer_mobile}</span>
+                            <span class="meta-separator">•</span>
+                            <span>AM: ${customer.account_manager_name}</span>
+                        </div>
+                    </div>
+                    <div class="approval-badges">
+                        <span class="badge poc-badge ${customer.poc_type}">${formatPOCType(customer.poc_type)}</span>
+                        <span class="badge approval-badge pending">Pending Approval</span>
+                    </div>
                 </div>
             </div>
-            <div class="mt-3 flex gap-2">
-                <button onclick="toggleCredentialStatus(${credential.id}, ${!credential.is_active})" class="px-3 py-1 text-xs rounded-lg ${credential.is_active ? 'dark:bg-dark-semantic-danger-300' : 'dark:bg-dark-success-600'} dark:text-utility-white hover:opacity-90">
-                    ${credential.is_active ? 'Deactivate' : 'Activate'}
+            
+            <div class="approval-card-body">
+                <div class="approval-details-grid">
+                    <div class="detail-item">
+                        <span class="detail-label">POC Duration:</span>
+                        <span class="detail-value">${customer.poc_duration || 30} days</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Start Date:</span>
+                        <span class="detail-value">${formatDate(customer.poc_start_date)}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">End Date:</span>
+                        <span class="detail-value">${formatDate(customer.poc_end_date)}</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Submitted:</span>
+                        <span class="detail-value">${formatDate(customer.created_at)}</span>
+                    </div>
+                </div>
+                
+                ${customer.lead_sources && customer.lead_sources.length > 0 ? `
+                    <div class="lead-sources">
+                        <span class="detail-label">Lead Sources:</span>
+                        <div class="lead-sources-list">
+                            ${customer.lead_sources.map(source => `<span class="lead-source-tag">${source}</span>`).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+                
+                ${customer.requirements && customer.requirements.length > 0 ? `
+                    <div class="requirements">
+                        <span class="detail-label">Requirements:</span>
+                        <div class="requirements-list">
+                            ${customer.requirements.map(req => `<span class="requirement-tag">${req}</span>`).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+            </div>
+            
+            <div class="approval-card-actions">
+                <button onclick="approveCustomer(${customer.id})" class="action-btn approve-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20 6L9 17l-5-5"/>
+                    </svg>
+                    Approve
                 </button>
-                <button onclick="deleteCredential(${credential.id})" class="px-3 py-1 text-xs rounded-lg dark:bg-dark-semantic-danger-300 dark:text-utility-white hover:opacity-90">
-                    Delete
+                <button onclick="openRejectModal(${customer.id})" class="action-btn reject-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6L6 18"/>
+                        <path d="M6 6l12 12"/>
+                    </svg>
+                    Reject
                 </button>
             </div>
         </div>
     `).join('');
 }
 
-function getRoleBadgeClass(role) {
-    switch (role) {
-        case 'admin': return 'dark:bg-dark-semantic-danger-300';
-        case 'manager': return 'dark:bg-dark-warning-600';
-        case 'user': return 'dark:bg-dark-info-600';
-        default: return 'dark:bg-dark-stroke-base-400';
+// Update scheduled emails list
+function updateScheduledEmailsList() {
+    const scheduledEmailsList = document.getElementById('scheduledEmailsList');
+    
+    if (scheduledEmails.length === 0) {
+        scheduledEmailsList.innerHTML = `
+            <div class="text-center py-8">
+                <p class="text-body-l-regular dark:text-dark-base-500">No scheduled emails</p>
+            </div>
+        `;
+        return;
     }
+
+    scheduledEmailsList.innerHTML = scheduledEmails.map(email => {
+        const customer = customers.find(c => c.id === email.customer_id);
+        return `
+            <div class="scheduled-email-card">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h4 class="text-body-m-semibold dark:text-dark-base-600">${customer ? customer.customer_name : 'Unknown Customer'}</h4>
+                        <p class="text-body-s-regular dark:text-dark-base-500">${email.email_type.replace('_', ' ').toUpperCase()}</p>
+                        <p class="text-body-s-regular dark:text-dark-base-400">Scheduled: ${formatDateTime(email.scheduled_datetime)}</p>
+                        ${email.custom_message ? `<p class="text-body-s-regular dark:text-dark-base-400 mt-1">Message: ${email.custom_message}</p>` : ''}
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="badge ${email.status === 'sent' ? 'sent' : email.status === 'failed' ? 'failed' : 'pending'}">${email.status}</span>
+                        ${email.status === 'pending' ? `
+                            <button onclick="cancelScheduledEmail(${email.id})" class="text-xs px-2 py-1 rounded dark:bg-dark-semantic-danger-300 dark:text-utility-white">
+                                Cancel
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
-async function handleAddCredential(e) {
-    e.preventDefault();
-    
-    const formData = new FormData(e.target);
-    const credentialData = {
-        full_name: formData.get('fullName'),
-        email: formData.get('email'),
-        password: formData.get('password'),
-        role: formData.get('role'),
-        department: formData.get('department'),
-        is_active: true,
-        created_by: userSession?.email || 'admin',
-        created_at: new Date().toISOString()
-    };
-
+// Customer and Lead Management
+async function addCustomer(customerData) {
     try {
         const { data, error } = await supabase
-            .from('user_credentials')
-            .insert([credentialData]);
+            .from('customers')
+            .insert([{
+                ...customerData,
+                approval_status: 'pending',
+                created_at: new Date().toISOString()
+            }]);
 
-        if (error) {
-            console.error('Error saving credential:', error);
-            if (error.code === '23505') { // Unique constraint violation
-                alert('Error: Email already exists!');
-            } else {
-                alert('Error saving credential: ' + error.message);
-            }
-            return;
-        }
+        if (error) throw error;
 
-        alert('User credential added successfully!');
-        document.getElementById('addCredentialForm').reset();
-        loadCredentials();
+        // Show success message and load data
+        closeAddCustomerForm();
+        loadData();
         
-        // Show email notification
-        showEmailToast(`User account created for ${credentialData.email}`);
-
+        showEmailToast(`Customer "${customerData.customer_name}" submitted for approval`);
+        
     } catch (error) {
-        console.error('Error saving credential:', error);
-        alert('Error saving credential');
+        console.error('Error adding customer:', error);
+        alert('Error adding customer: ' + error.message);
     }
 }
 
-async function toggleCredentialStatus(id, newStatus) {
-    try {
-        const { error } = await supabase
-            .from('user_credentials')
-            .update({ is_active: newStatus })
-            .eq('id', id);
-
-        if (error) {
-            console.error('Error updating credential status:', error);
-            alert('Error updating status: ' + error.message);
-            return;
-        }
-
-        loadCredentials();
-        showEmailToast(`User ${newStatus ? 'activated' : 'deactivated'} successfully`);
-    } catch (error) {
-        console.error('Error updating credential status:', error);
-        alert('Error updating status');
-    }
-}
-
-async function deleteCredential(id) {
-    if (!confirm('Are you sure you want to delete this user credential?')) {
+async function deleteCustomer(customerId) {
+    if (!confirm('Are you sure you want to delete this customer? This action cannot be undone.')) {
         return;
     }
 
     try {
         const { error } = await supabase
-            .from('user_credentials')
+            .from('customers')
             .delete()
-            .eq('id', id);
+            .eq('id', customerId);
 
-        if (error) {
-            console.error('Error deleting credential:', error);
-            alert('Error deleting credential: ' + error.message);
-            return;
-        }
+        if (error) throw error;
 
-        loadCredentials();
-        showEmailToast('User credential deleted successfully');
+        loadData();
+        showEmailToast('Customer deleted successfully');
     } catch (error) {
-        console.error('Error deleting credential:', error);
-        alert('Error deleting credential');
+        console.error('Error deleting customer:', error);
+        alert('Error deleting customer');
     }
 }
 
-function toggleNewUserPasswordVisibility() {
-    const passwordField = document.getElementById('newUserPassword');
-    const type = passwordField.getAttribute('type') === 'password' ? 'text' : 'password';
-    passwordField.setAttribute('type', type);
-}
-
-// Supabase Real-time listeners
-function setupRealtimeListeners() {
-    // Listen for customer changes
-    supabase
-        .channel('customers')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, 
-            (payload) => {
-                console.log('Customer change received!', payload);
-                loadData();
-            }
-        )
-        .subscribe();
-
-    // Listen for lead changes
-    supabase
-        .channel('leads')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, 
-            (payload) => {
-                console.log('Lead change received!', payload);
-                loadData();
-            }
-        )
-        .subscribe();
-
-    // Listen for credential changes
-    supabase
-        .channel('credentials')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'user_credentials' }, 
-            (payload) => {
-                console.log('Credential change received!', payload);
-                loadCredentials();
-            }
-        )
-        .subscribe();
-
-    // Listen for scheduled email changes
-    supabase
-        .channel('scheduled_emails')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'scheduled_emails' }, 
-            (payload) => {
-                console.log('Scheduled email change received!', payload);
-                loadScheduledEmails();
-            }
-        )
-        .subscribe();
-
-    // Listen for inventory changes
-    supabase
-        .channel('inventory_stock')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_stock' }, 
-            (payload) => {
-                console.log('Inventory stock change received!', payload);
-                if (window.loadInventoryData) window.loadInventoryData();
-            }
-        )
-        .subscribe();
-
-    supabase
-        .channel('inventory_inward')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_inward' }, 
-            (payload) => {
-                console.log('Inventory inward change received!', payload);
-                if (window.loadInventoryData) window.loadInventoryData();
-            }
-        )
-        .subscribe();
-
-    supabase
-        .channel('inventory_outward')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_outward' }, 
-            (payload) => {
-                console.log('Inventory outward change received!', payload);
-                if (window.loadInventoryData) window.loadInventoryData();
-            }
-        )
-        .subscribe();
-}
-
-// Load data from Supabase with proper approval filtering
-async function loadData() {
-    try {
-        // Load all customers
-        const { data: customerData, error: customerError } = await supabase
-            .from('customers')
-            .select('*')
-            .order('created_at', { ascending: false });
-
-        if (customerError) {
-            console.error('Error loading customers:', customerError);
-        } else {
-            customers = customerData || [];
-            
-            // Separate approved and pending customers
-            approvedCustomers = customers.filter(customer => customer.approval_status === 'approved');
-            filteredCustomers = selectedCustomerId ? 
-                approvedCustomers.filter(c => c.id === selectedCustomerId) : 
-                [...approvedCustomers];
-        }
-
-        // Load leads
-        const { data: leadData, error: leadError } = await supabase
-            .from('leads')
-            .select('*')
-            .order('created_at', { ascending: false });
-
-        if (leadError) {
-            console.error('Error loading leads:', leadError);
-        } else {
-            leads = leadData || [];
-            filteredLeads = [...leads];
-        }
-
-        // Load pending approvals (only pending customers)
-        const { data: approvalData, error: approvalError } = await supabase
-            .from('customers')
-            .select('*')
-            .eq('approval_status', 'pending')
-            .order('created_at', { ascending: false });
-
-        if (approvalError) {
-            console.error('Error loading pending approvals:', approvalError);
-        } else {
-            pendingApprovals = approvalData || [];
-        }
-
-        // Load inventory data for main dashboard statistics
-        if (typeof loadInventoryData === 'function') {
-            await loadInventoryData();
-            // Ensure stock summary is updated after inventory data loads
-            if (typeof updateStockSummary === 'function') {
-                updateStockSummary();
-            }
-        }
-        
-        // Update UI
-        updateCustomerCounts();
-        updateTabsContent();
-        updateFinanceContent();
-        applyCurrentFilter();
-        
-        // Show floating add button when on dashboard
-        if (!document.getElementById('dashboardPage').classList.contains('hidden')) {
-            document.getElementById('floatingAddBtn').classList.remove('hidden');
-        }
-    } catch (error) {
-        console.error('Error loading data:', error);
-    }
-}
-
-// Calculate days remaining for POC
-function calculateDaysRemaining(endDate) {
-    if (!endDate) return null;
-    const today = new Date();
-    const pocEnd = new Date(endDate);
-    const diffTime = pocEnd - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
-}
-
-// Show POC Action Modal
-function showPOCActionModal(customer) {
-    currentPOCAction = customer;
-    document.getElementById('pocCustomerName').textContent = customer.customer_name;
-    document.getElementById('pocActionModal').classList.remove('hidden');
-}
-
-// Close POC Action Modal
-function closePOCActionModal() {
-    currentPOCAction = null;
-    document.getElementById('pocActionModal').classList.add('hidden');
-    document.getElementById('extendPOCForm').classList.add('hidden');
-}
-
-// Show Extend POC Form
-function showExtendPOCForm() {
-    document.getElementById('extendPOCForm').classList.remove('hidden');
-}
-
-// Hide Extend POC Form
-function hideExtendPOCForm() {
-    document.getElementById('extendPOCForm').classList.add('hidden');
-}
-
-// Confirm Extend POC with custom days
-async function confirmExtendPOC() {
-    if (!currentPOCAction) return;
-    
-    const extendDays = parseInt(document.getElementById('extendDaysInput').value) || 10;
-    
-    try {
-        const currentEndDate = new Date(currentPOCAction.poc_end_date);
-        const newEndDate = new Date(currentEndDate);
-        newEndDate.setDate(newEndDate.getDate() + extendDays);
-        
-        const { error } = await supabase
-            .from('customers')
-            .update({
-                poc_end_date: newEndDate.toISOString().split('T')[0],
-                last_extended: new Date().toISOString(),
-                extension_count: (currentPOCAction.extension_count || 0) + 1,
-                poc_extended_days: (currentPOCAction.poc_extended_days || 0) + extendDays
-            })
-            .eq('id', currentPOCAction.id);
-
-        if (error) {
-            console.error('Error extending POC:', error);
-            alert('Error extending POC: ' + error.message);
-        } else {
-            alert(`POC extended by ${extendDays} days for ${currentPOCAction.customer_name}`);
-            closePOCActionModal();
-            loadData();
-            
-            // Send confirmation email
-            await sendEmail('poc_extended', currentPOCAction, extendDays.toString());
-        }
-    } catch (error) {
-        console.error('Error extending POC:', error);
-        alert('Error extending POC');
-    }
-}
-
-// End POC
-async function endPOC() {
-    if (!currentPOCAction) return;
-    
-    try {
-        const { error } = await supabase
-            .from('customers')
-            .update({
-                status: 'closed',
-                poc_end_date: new Date().toISOString().split('T')[0]
-            })
-            .eq('id', currentPOCAction.id);
-
-        if (error) {
-            console.error('Error ending POC:', error);
-            alert('Error ending POC: ' + error.message);
-        } else {
-            alert(`POC ended for ${currentPOCAction.customer_name}`);
-            closePOCActionModal();
-            loadData();
-            
-            // Send confirmation email
-            await sendEmail('poc_ended', currentPOCAction);
-        }
-    } catch (error) {
-        console.error('Error ending POC:', error);
-        alert('Error ending POC');
-    }
-}
-
-// Onboard Customer
-async function onboardCustomer() {
-    if (!currentPOCAction) return;
-    
-    try {
-        const { error } = await supabase
-            .from('customers')
-            .update({
-                status: 'onboarded',
-                poc_type: 'direct_onboarding',
-                onboard_source: 'poc_conversion'
-            })
-            .eq('id', currentPOCAction.id);
-
-        if (error) {
-            console.error('Error onboarding customer:', error);
-            alert('Error onboarding customer: ' + error.message);
-        } else {
-            alert(`${currentPOCAction.customer_name} has been onboarded successfully!`);
-            closePOCActionModal();
-            loadData();
-            
-            // Send confirmation email
-            await sendEmail('customer_onboarded', currentPOCAction);
-        }
-    } catch (error) {
-        console.error('Error onboarding customer:', error);
-        alert('Error onboarding customer');
-    }
-}
-
-// Update customer counts - only count approved customers
-function updateCustomerCounts() {
-    const totalCustomers = filteredCustomers.length;
-    
-    // Count different categories from filtered customers
-    const ongoingLeadsCount = filteredLeads.filter(lead => lead.status !== 'Closed').length;
-    const pocCount = filteredCustomers.filter(customer => 
-        (customer.poc_type === 'free_poc' || customer.poc_type === 'paid_poc') && 
-        customer.status !== 'closed'
-    ).length;
-    const onboardedCount = filteredCustomers.filter(customer => 
-        customer.poc_type === 'direct_onboarding' || customer.status === 'onboarded'
-    ).length;
-    const closedCount = filteredCustomers.filter(customer => customer.status === 'closed').length +
-        filteredLeads.filter(lead => lead.status === 'Closed').length;
-    
-    // Update tab counts
-    document.getElementById('allCount').textContent = totalCustomers;
-    document.getElementById('pocCount').textContent = pocCount;
-    document.getElementById('onboardedCount').textContent = onboardedCount;
-    document.getElementById('closedCount').textContent = closedCount;
-    document.getElementById('ongoingLeadsCount').textContent = ongoingLeadsCount;
-    
-    // Update finance stats
-    const approvedCount = customers.filter(c => c.approval_status === 'approved').length;
-    const rejectedCount = customers.filter(c => c.approval_status === 'rejected').length;
-    
-    document.getElementById('pendingApprovalsCount').textContent = pendingApprovals.length;
-    document.getElementById('totalApprovedCount').textContent = approvedCount;
-    document.getElementById('totalRejectedCount').textContent = rejectedCount;
-}
-
-// Update tabs content
-function updateTabsContent() {
-    const currentTab = document.querySelector('.tab-button.active').id;
-    
-    if (currentTab === 'allTab') updateAllTab();
-    else if (currentTab === 'pocTab') updatePOCTab();
-    else if (currentTab === 'onboardedTab') updateOnboardedTab();
-    else if (currentTab === 'closedTab') updateClosedTab();
-    else if (currentTab === 'ongoingLeadsTab') updateOngoingLeadsTab();
-}
-
-// Update All tab
-function updateAllTab() {
-    const allList = document.getElementById('allCustomersList');
-    const allEmpty = document.getElementById('allEmptyState');
-
-    if (filteredCustomers.length === 0) {
-        allList.innerHTML = '';
-        allEmpty.style.display = 'block';
-    } else {
-        allEmpty.style.display = 'none';
-        allList.innerHTML = filteredCustomers.map(customer => createCustomerRow(customer)).join('');
-    }
-}
-
-// Update POC tab
-function updatePOCTab() {
-    const pocCustomers = filteredCustomers.filter(customer => 
-        (customer.poc_type === 'free_poc' || customer.poc_type === 'paid_poc') && 
-        customer.status !== 'closed'
-    );
-
-    const pocList = document.getElementById('pocCustomersList');
-    const pocEmpty = document.getElementById('pocEmptyState');
-
-    if (pocCustomers.length === 0) {
-        pocList.innerHTML = '';
-        pocEmpty.style.display = 'block';
-    } else {
-        pocEmpty.style.display = 'none';
-        pocList.innerHTML = pocCustomers.map(customer => createPOCRow(customer)).join('');
-    }
-}
-
-// Update Onboarded tab
-function updateOnboardedTab() {
-    const onboardedCustomers = filteredCustomers.filter(customer => 
-        customer.poc_type === 'direct_onboarding' || customer.status === 'onboarded'
-    );
-
-    const onboardedList = document.getElementById('onboardedCustomersList');
-    const onboardedEmpty = document.getElementById('onboardedEmptyState');
-
-    if (onboardedCustomers.length === 0) {
-        onboardedList.innerHTML = '';
-        onboardedEmpty.style.display = 'block';
-    } else {
-        onboardedEmpty.style.display = 'none';
-        onboardedList.innerHTML = onboardedCustomers.map(customer => createOnboardedRow(customer)).join('');
-    }
-}
-
-// Update Closed tab
-function updateClosedTab() {
-    const closedCustomers = filteredCustomers.filter(customer => customer.status === 'closed');
-    const closedLeads = filteredLeads.filter(lead => lead.status === 'Closed');
-
-    const closedList = document.getElementById('closedList');
-    const closedEmpty = document.getElementById('closedEmptyState');
-
-    if (closedCustomers.length === 0 && closedLeads.length === 0) {
-        closedList.innerHTML = '';
-        closedEmpty.style.display = 'block';
-    } else {
-        closedEmpty.style.display = 'none';
-        
-        let closedHTML = '';
-        
-        // Add closed customers
-        closedCustomers.forEach(customer => {
-            closedHTML += createClosedRow(customer, 'customer');
-        });
-        
-        // Add closed leads
-        closedLeads.forEach(lead => {
-            closedHTML += createClosedRow(lead, 'lead');
-        });
-        
-        closedList.innerHTML = closedHTML;
-    }
-}
-
-// Update Ongoing Leads tab
-function updateOngoingLeadsTab() {
-    const activeLeads = filteredLeads.filter(lead => lead.status !== 'Closed');
-    const leadsList = document.getElementById('ongoingLeadsList');
-    const leadsEmpty = document.getElementById('ongoingLeadsEmptyState');
-
-    if (activeLeads.length === 0) {
-        leadsList.innerHTML = '';
-        leadsEmpty.style.display = 'block';
-    } else {
-        leadsEmpty.style.display = 'none';
-        leadsList.innerHTML = activeLeads.map(lead => createLeadRow(lead)).join('');
-    }
-}
-
-// Create table rows for different tabs
-function createCustomerRow(customer) {
-    const formatDate = (dateString) => {
-        if (!dateString) return 'Not set';
-        return new Date(dateString).toLocaleDateString();
-    };
-
-    const getStatusBadge = (status, pocType) => {
-        if (status === 'closed') return '<span class="compact-badge condition-device_tampered">Closed</span>';
-        if (pocType === 'direct_onboarding') return '<span class="compact-badge status-available">Onboarded</span>';
-        if (pocType === 'free_poc') return '<span class="compact-badge condition-new">Free POC</span>';
-        if (pocType === 'paid_poc') return '<span class="compact-badge condition-lense_issue">Paid POC</span>';
-        return '<span class="compact-badge condition-used">Unknown</span>';
-    };
-
-    return `
-        <tr>
-            <td class="compact-text-primary">${customer.customer_name}</td>
-            <td class="compact-text-secondary">${customer.customer_email}</td>
-            <td class="compact-text-secondary">${customer.customer_mobile}</td>
-            <td>${getStatusBadge(customer.status, customer.poc_type)}</td>
-            <td class="compact-text-secondary">${formatDate(customer.poc_start_date)}</td>
-            <td class="compact-text-secondary">${formatDate(customer.poc_end_date)}</td>
-            <td>
-                ${customer.status !== 'closed' ? `
-                    <button onclick="showManualEmailModal(${JSON.stringify(customer).replace(/"/g, '&quot;')})" class="compact-btn compact-btn-primary">
-                        📧
-                    </button>
-                ` : ''}
-            </td>
-        </tr>
-    `;
-}
-
-function createPOCRow(customer) {
-    const formatDate = (dateString) => {
-        if (!dateString) return 'Not set';
-        return new Date(dateString).toLocaleDateString();
-    };
-
-    const daysRemaining = calculateDaysRemaining(customer.poc_end_date);
-    const getDaysRemainingBadge = () => {
-        if (daysRemaining === null) return 'N/A';
-        
-        let badgeClass = 'condition-new';
-        let text = `${daysRemaining} days`;
-        
-        if (daysRemaining <= 0) {
-            badgeClass = 'condition-device_tampered';
-            text = 'Expired';
-        } else if (daysRemaining <= 3) {
-            badgeClass = 'condition-lense_issue';
-        }
-        
-        return `<span class="compact-badge ${badgeClass}">${text}</span>`;
-    };
-
-    const getPOCTypeBadge = (pocType) => {
-        return pocType === 'free_poc' ? 
-            '<span class="compact-badge condition-new">Free POC</span>' :
-            '<span class="compact-badge condition-lense_issue">Paid POC</span>';
-    };
-
-    return `
-        <tr>
-            <td class="compact-text-primary">${customer.customer_name}</td>
-            <td class="compact-text-secondary">${customer.customer_email}</td>
-            <td>${getPOCTypeBadge(customer.poc_type)}</td>
-            <td>${getDaysRemainingBadge()}</td>
-            <td class="compact-text-secondary">${customer.account_manager_name}</td>
-            <td>
-                <button onclick="showPOCActionModal(${JSON.stringify(customer).replace(/"/g, '&quot;')})" class="compact-btn compact-btn-primary">
-                    ⚙️
-                </button>
-            </td>
-        </tr>
-    `;
-}
-
-function createOnboardedRow(customer) {
-    const getOnboardSourceBadge = (source) => {
-        const badges = {
-            'direct': '<span class="compact-badge status-available">Direct</span>',
-            'poc_conversion': '<span class="compact-badge condition-new">POC Converted</span>',
-            'lead_conversion': '<span class="compact-badge condition-used">Lead Converted</span>'
-        };
-        return badges[source] || '<span class="compact-badge condition-used">Unknown</span>';
-    };
-
-    return `
-        <tr>
-            <td class="compact-text-primary">${customer.customer_name}</td>
-            <td class="compact-text-secondary">${customer.customer_email}</td>
-            <td class="compact-text-secondary">${customer.customer_mobile}</td>
-            <td>${getOnboardSourceBadge(customer.onboard_source)}</td>
-            <td class="compact-text-secondary">${customer.account_manager_name}</td>
-            <td>
-                <button onclick="showManualEmailModal(${JSON.stringify(customer).replace(/"/g, '&quot;')})" class="compact-btn compact-btn-primary">
-                    📧
-                </button>
-            </td>
-        </tr>
-    `;
-}
-
-function createClosedRow(item, type) {
-    const formatDate = (dateString) => {
-        if (!dateString) return 'N/A';
-        return new Date(dateString).toLocaleDateString();
-    };
-
-    if (type === 'customer') {
-        return `
-            <tr>
-                <td class="compact-text-primary">${item.customer_name}</td>
-                <td class="compact-text-secondary">${item.customer_email}</td>
-                <td><span class="compact-badge condition-device_tampered">Customer</span></td>
-                <td class="compact-text-secondary">${formatDate(item.poc_end_date)}</td>
-                <td class="compact-text-secondary">POC Ended</td>
-            </tr>
-        `;
-    } else {
-        return `
-            <tr>
-                <td class="compact-text-primary">${item.customer_name}</td>
-                <td class="compact-text-secondary">${item.contact}</td>
-                <td><span class="compact-badge condition-used">Lead</span></td>
-                <td class="compact-text-secondary">${formatDate(item.created_at)}</td>
-                <td class="compact-text-secondary">Lead Closed</td>
-            </tr>
-        `;
-    }
-}
-
-function createLeadRow(lead) {
-    const getStatusBadge = (status) => {
-        const statusClasses = {
-            'New': 'condition-new',
-            'In Progress': 'condition-lense_issue',
-            'Qualified': 'status-available',
-            'Not Qualified': 'condition-device_tampered',
-            'Converted': 'status-allocated'
-        };
-        
-        return `<span class="compact-badge ${statusClasses[status] || 'condition-used'}">${status}</span>`;
-    };
-
-    const getTypeBadge = (type) => {
-        return type === 'Inbound' ? 
-            '<span class="compact-badge status-available">Inbound</span>' :
-            '<span class="compact-badge condition-new">Outbound</span>';
-    };
-
-    return `
-        <tr>
-            <td class="compact-text-primary">${lead.customer_name}</td>
-            <td class="compact-text-secondary">${lead.contact}</td>
-            <td>${getTypeBadge(lead.type)}</td>
-            <td class="compact-text-secondary">${lead.fleet_size || 'N/A'}</td>
-            <td>${getStatusBadge(lead.status)}</td>
-            <td>
-                <button onclick="convertLeadToCustomer(${lead.id})" class="compact-btn compact-btn-success">
-                    ✓
-                </button>
-                <button onclick="closeLeadAction(${lead.id})" class="compact-btn compact-btn-danger ml-2">
-                    ✕
-                </button>
-            </td>
-        </tr>
-    `;
-}
-
-// Convert lead to customer
 async function convertLeadToCustomer(leadId) {
-    try {
-        const lead = leads.find(l => l.id === leadId);
-        if (!lead) return;
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) return;
 
-        // Create customer from lead data with pending approval status
-        const customerData = {
-            account_manager_name: 'Lead Converter',
-            account_manager_id: 'LC001',
-            customer_name: lead.customer_name,
-            customer_mobile: lead.contact.includes('@') ? '' : lead.contact,
-            customer_email: lead.contact.includes('@') ? lead.contact : `${lead.customer_name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
-            lead_sources: ['lead_conversion'],
-            requirements: [],
-            poc_type: 'free_poc', // Default to free POC
-            poc_duration: 30,
-            poc_start_date: new Date().toISOString().split('T')[0],
-            poc_end_date: null, // Will be set after approval
-            status: 'active',
-            onboard_source: 'lead_conversion',
-            approval_status: 'pending', // Set to pending
-            extension_count: 0,
-            poc_extended_days: 0,
-            email_notifications_sent: 0,
-            created_at: new Date().toISOString()
-        };
-
-        const { data: newCustomer, error: customerError } = await supabase
-            .from('customers')
-            .insert([customerData])
-            .select()
-            .single();
-
-        if (customerError) {
-            console.error('Error creating customer:', customerError);
-            alert('Error creating customer: ' + customerError.message);
-            return;
-        }
-
-        // Mark lead as converted
-        const { error: leadError } = await supabase
-            .from('leads')
-            .update({ status: 'Converted' })
-            .eq('id', leadId);
-
-        if (leadError) {
-            console.error('Error updating lead:', leadError);
-        }
-
-        loadData();
-        
-        // Navigate to Finance tab to show the pending approval
-        showFinance();
-        
-        showEmailToast(`Lead converted to customer: ${lead.customer_name}. Awaiting finance approval.`);
-        
-    } catch (error) {
-        console.error('Error converting lead:', error);
-        alert('Error converting lead');
-    }
+    // Pre-fill the add customer form with lead data
+    document.getElementById('customerName').value = lead.customer_name;
+    document.getElementById('customerMobile').value = lead.contact;
+    document.getElementById('customerEmail').value = lead.contact; // Assuming contact is email
+    
+    // Open add customer modal
+    openAddCustomerForm();
+    
+    // Optional: Delete the lead after conversion
+    // await deleteLead(leadId);
 }
 
-// Close lead action
-async function closeLeadAction(leadId) {
+async function deleteLead(leadId) {
+    if (!confirm('Are you sure you want to delete this lead?')) {
+        return;
+    }
+
     try {
-        const lead = leads.find(l => l.id === leadId);
-        if (!lead) return;
-
-        if (!confirm(`Are you sure you want to close lead "${lead.customer_name}"?`)) {
-            return;
-        }
-
         const { error } = await supabase
             .from('leads')
-            .update({ status: 'Closed' })
+            .delete()
             .eq('id', leadId);
 
-        if (error) {
-            console.error('Error closing lead:', error);
-            alert('Error closing lead: ' + error.message);
-            return;
-        }
+        if (error) throw error;
 
         loadData();
-        showEmailToast(`Lead closed: ${lead.customer_name}`);
-        
-        // Show Closed tab
-        showClosedTab();
+        showEmailToast('Lead deleted successfully');
     } catch (error) {
-        console.error('Error closing lead:', error);
-        alert('Error closing lead');
+        console.error('Error deleting lead:', error);
+        alert('Error deleting lead');
     }
 }
 
-// Finance Tab Content
-function showFinance() {
-    hideAllContent();
-    document.getElementById('financeContent').classList.remove('hidden');
-    updateMenuHighlight('finance');
-    updateFinanceContent();
-}
-
-function updateFinanceContent() {
-    const pendingList = document.getElementById('pendingApprovalsList');
-    const financeEmpty = document.getElementById('financeEmptyState');
-
-    if (pendingApprovals.length === 0) {
-        pendingList.innerHTML = '';
-        financeEmpty.style.display = 'block';
-    } else {
-        financeEmpty.style.display = 'none';
-        pendingList.innerHTML = pendingApprovals.map(customer => createApprovalCard(customer)).join('');
-    }
-}
-
-function createApprovalCard(customer) {
-    const formatDate = (dateString) => {
-        if (!dateString) return 'Not set';
-        return new Date(dateString).toLocaleDateString();
-    };
-
-    return `
-        <div class="approval-card p-4 rounded-lg dark:bg-dark-fill-base-300 dark:border dark:border-dark-stroke-contrast-400">
-            <div class="flex justify-between items-start mb-3">
-                <div>
-                    <h4 class="text-body-l-semibold dark:text-dark-base-600">${customer.customer_name}</h4>
-                    <p class="text-body-m-regular dark:text-dark-base-500">${customer.customer_email}</p>
-                    <p class="text-body-s-regular dark:text-dark-base-500">Submitted: ${formatDate(customer.created_at)}</p>
-                </div>
-                <div class="flex flex-col gap-2 items-end">
-                    <span class="px-2 py-1 text-xs rounded-full dark:bg-dark-warning-600 dark:text-utility-white">Pending Approval</span>
-                </div>
-            </div>
-            <div class="grid grid-cols-2 gap-4 text-body-s-regular dark:text-dark-base-500 mb-4">
-                <div>
-                    <span class="font-semibold">Mobile:</span> ${customer.customer_mobile}
-                </div>
-                <div>
-                    <span class="font-semibold">Account Manager:</span> ${customer.account_manager_name}
-                </div>
-                <div>
-                    <span class="font-semibold">POC Type:</span> ${customer.poc_type}
-                </div>
-                <div>
-                    <span class="font-semibold">POC Duration:</span> ${customer.poc_duration || 30} days
-                </div>
-            </div>
-            <div class="flex gap-2">
-                <button onclick="approveCustomer(${customer.id})" class="px-4 py-2 text-xs rounded-lg dark:bg-dark-success-600 dark:text-utility-white hover:dark:bg-dark-success-600/90">
-                    Approve
-                </button>
-                <button onclick="rejectCustomer(${customer.id})" class="px-4 py-2 text-xs rounded-lg dark:bg-dark-semantic-danger-300 dark:text-utility-white hover:dark:bg-dark-semantic-danger-300/90">
-                    Reject
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-// Approve customer from finance
+// Approval functions
 async function approveCustomer(customerId) {
     try {
-        const customer = pendingApprovals.find(c => c.id === customerId);
-        if (!customer) return;
-
-        if (!confirm(`Approve customer "${customer.customer_name}"?`)) {
-            return;
-        }
-
-        // Calculate POC end date from start date and duration
-        let pocEndDate = null;
-        if (customer.poc_start_date && customer.poc_duration) {
-            const startDate = new Date(customer.poc_start_date);
-            const endDate = new Date(startDate);
-            endDate.setDate(endDate.getDate() + parseInt(customer.poc_duration));
-            pocEndDate = endDate.toISOString().split('T')[0];
-        }
-
+        const customer = customers.find(c => c.id === customerId);
+        
         const { error } = await supabase
             .from('customers')
             .update({
                 approval_status: 'approved',
-                poc_end_date: pocEndDate,
                 approved_at: new Date().toISOString(),
                 approved_by: userSession?.email || 'admin'
             })
             .eq('id', customerId);
 
-        if (error) {
-            console.error('Error approving customer:', error);
-            alert('Error approving customer: ' + error.message);
-            return;
-        }
+        if (error) throw error;
 
-        alert(`Customer "${customer.customer_name}" approved successfully!`);
-        loadData();
+        // Send welcome email
+        await sendEmail('welcome', customer);
         
-        // Send approval email
-        await sendEmail('customer_onboarded', customer);
+        loadData();
         showEmailToast(`Customer approved: ${customer.customer_name}`);
     } catch (error) {
         console.error('Error approving customer:', error);
@@ -1629,32 +1554,35 @@ async function approveCustomer(customerId) {
     }
 }
 
-// Reject customer from finance
-async function rejectCustomer(customerId) {
+function openRejectModal(customerId) {
+    currentPOCAction = customerId;
+    document.getElementById('rejectModal').classList.remove('hidden');
+}
+
+function closeRejectModal() {
+    document.getElementById('rejectModal').classList.add('hidden');
+    document.getElementById('rejectionReason').value = '';
+    currentPOCAction = null;
+}
+
+async function rejectCustomer(customerId, rejectionReason) {
     try {
-        const customer = pendingApprovals.find(c => c.id === customerId);
-        if (!customer) return;
-
-        const reason = prompt(`Reject customer "${customer.customer_name}"?\nPlease provide a reason:`);
-        if (!reason) return;
-
+        const customer = customers.find(c => c.id === customerId);
+        
         const { error } = await supabase
             .from('customers')
             .update({
                 approval_status: 'rejected',
-                rejection_reason: reason,
                 rejected_at: new Date().toISOString(),
-                rejected_by: userSession?.email || 'admin'
+                rejected_by: userSession?.email || 'admin',
+                rejection_reason: rejectionReason
             })
             .eq('id', customerId);
 
-        if (error) {
-            console.error('Error rejecting customer:', error);
-            alert('Error rejecting customer: ' + error.message);
-            return;
-        }
+        if (error) throw error;
 
-        alert(`Customer "${customer.customer_name}" rejected.`);
+        closeRejectModal();
+        console.log(`Customer "${customer.customer_name}" rejected.`);
         loadData();
         showEmailToast(`Customer rejected: ${customer.customer_name}`);
     } catch (error) {
@@ -1826,53 +1754,45 @@ function handleSearch(e) {
     
     if (!searchTerm) {
         // If search is empty, show all approved data
-        filteredCustomers = selectedCustomerId ? 
+        filteredCustomers = selectedCustomerId ?
             approvedCustomers.filter(c => c.id === selectedCustomerId) :
             [...approvedCustomers];
         filteredLeads = [...leads];
-    } else {
-        // Filter customers
-        filteredCustomers = approvedCustomers.filter(customer => {
-            if (selectedCustomerId && customer.id !== selectedCustomerId) return false;
-            
-            return (
-                customer.customer_name.toLowerCase().includes(searchTerm) ||
-                customer.customer_email.toLowerCase().includes(searchTerm) ||
-                customer.customer_mobile.includes(searchTerm) ||
-                customer.account_manager_name.toLowerCase().includes(searchTerm) ||
-                customer.account_manager_id.toLowerCase().includes(searchTerm) ||
-                customer.poc_type.toLowerCase().includes(searchTerm) ||
-                (customer.status && customer.status.toLowerCase().includes(searchTerm))
-            );
-        });
+        updateTabsContent();
+        return;
+    }
 
-        // Filter leads
-        filteredLeads = leads.filter(lead => {
-            return (
-                lead.customer_name.toLowerCase().includes(searchTerm) ||
-                lead.contact.toLowerCase().includes(searchTerm) ||
-                lead.status.toLowerCase().includes(searchTerm) ||
-                lead.type.toLowerCase().includes(searchTerm) ||
-                (lead.fleet_size && lead.fleet_size.toString().includes(searchTerm))
-            );
-        });
+    // Filter customers
+    filteredCustomers = approvedCustomers.filter(customer => 
+        customer.customer_name.toLowerCase().includes(searchTerm) ||
+        customer.customer_email.toLowerCase().includes(searchTerm) ||
+        customer.customer_mobile.toLowerCase().includes(searchTerm) ||
+        customer.account_manager_name.toLowerCase().includes(searchTerm) ||
+        customer.poc_type.toLowerCase().includes(searchTerm)
+    );
+
+    // Apply customer dropdown filter if active
+    if (selectedCustomerId) {
+        filteredCustomers = filteredCustomers.filter(c => c.id === selectedCustomerId);
     }
-    
-    // Update all tabs content
+
+    // Filter leads
+    filteredLeads = leads.filter(lead => 
+        lead.customer_name.toLowerCase().includes(searchTerm) ||
+        lead.contact.toLowerCase().includes(searchTerm) ||
+        lead.type.toLowerCase().includes(searchTerm) ||
+        lead.status.toLowerCase().includes(searchTerm)
+    );
+
     updateTabsContent();
-    
-    // Show search results message
-    if (searchTerm && (filteredCustomers.length === 0 && filteredLeads.length === 0)) {
-        showEmailToast(`No results found for "${searchTerm}"`);
-    } else if (searchTerm) {
-        const totalResults = filteredCustomers.length + filteredLeads.length;
-        showEmailToast(`Found ${totalResults} result(s) for "${searchTerm}"`);
-    }
 }
 
 function clearSearch() {
     document.getElementById('searchInput').value = '';
     currentFilter = '';
+    selectedCustomerId = null;
+    
+    // Reset to show all approved customers
     filteredCustomers = selectedCustomerId ?
         approvedCustomers.filter(c => c.id === selectedCustomerId) :
         [...approvedCustomers];
@@ -2051,145 +1971,129 @@ function goToStep2() {
             return;
         }
     }
-
-    // Proceed to step 2
-    document.getElementById('step1Content').classList.add('hidden');
-    document.getElementById('step2Content').classList.remove('hidden');
     
-    // Update step indicator
-    document.getElementById('step1Indicator').classList.remove('active');
-    document.getElementById('step1Indicator').classList.add('completed');
-    document.getElementById('step2Indicator').classList.add('active');
-}
-
-function goToStep1() {
-    document.getElementById('step2Content').classList.add('hidden');
-    document.getElementById('step1Content').classList.remove('hidden');
+    console.log('Validation passed, moving to step 2');
     
-    // Update step indicator
-    document.getElementById('step2Indicator').classList.remove('active');
-    document.getElementById('step1Indicator').classList.remove('completed');
-    document.getElementById('step1Indicator').classList.add('active');
+    // Hide step 1, show step 2
+    document.getElementById('step1').classList.add('hidden');
+    document.getElementById('step2').classList.remove('hidden');
+    
+    // Update step indicators
+    document.querySelector('.step-indicator[data-step="1"]').classList.remove('active');
+    document.querySelector('.step-indicator[data-step="1"]').classList.add('completed');
+    document.querySelector('.step-indicator[data-step="2"]').classList.add('active');
 }
 
-// Form modal functions
-function showAddLeadForm() {
-    document.getElementById('addLeadModal').classList.remove('hidden');
-    document.getElementById('addMenu').classList.add('hidden');
+function goToStep3() {
+    console.log('goToStep3 called');
+    
+    // Hide step 2, show step 3
+    document.getElementById('step2').classList.add('hidden');
+    document.getElementById('step3').classList.remove('hidden');
+    
+    // Update step indicators
+    document.querySelector('.step-indicator[data-step="2"]').classList.remove('active');
+    document.querySelector('.step-indicator[data-step="2"]').classList.add('completed');
+    document.querySelector('.step-indicator[data-step="3"]').classList.add('active');
 }
 
-function closeAddLeadForm() {
-    document.getElementById('addLeadModal').classList.add('hidden');
-    document.getElementById('addLeadForm').reset();
+function goBackToStep1() {
+    document.getElementById('step2').classList.add('hidden');
+    document.getElementById('step1').classList.remove('hidden');
+    
+    // Update step indicators
+    document.querySelector('.step-indicator[data-step="2"]').classList.remove('active');
+    document.querySelector('.step-indicator[data-step="1"]').classList.remove('completed');
+    document.querySelector('.step-indicator[data-step="1"]').classList.add('active');
 }
 
-function showAddCustomerForm() {
-    document.getElementById('addCustomerModal').classList.remove('hidden');
-    document.getElementById('addMenu').classList.add('hidden');
-    // Reset to step 1
-    goToStep1();
+function goBackToStep2() {
+    document.getElementById('step3').classList.add('hidden');
+    document.getElementById('step2').classList.remove('hidden');
+    
+    // Update step indicators
+    document.querySelector('.step-indicator[data-step="3"]').classList.remove('active');
+    document.querySelector('.step-indicator[data-step="2"]').classList.remove('completed');
+    document.querySelector('.step-indicator[data-step="2"]').classList.add('active');
 }
 
-function closeAddCustomerForm() {
-    document.getElementById('addCustomerModal').classList.add('hidden');
-    document.getElementById('addCustomerForm').reset();
-    document.getElementById('customDurationDiv').classList.add('hidden');
-    // Reset to step 1
-    goToStep1();
+// Toast and email functions
+function showEmailToast(message, type = 'success') {
+    const toast = document.getElementById('emailToast');
+    const toastMessage = document.getElementById('emailToastMessage');
+    
+    toastMessage.textContent = message;
+    
+    // Change color based on type
+    if (type === 'error') {
+        toast.classList.remove('bg-green-600');
+        toast.classList.add('bg-red-600');
+    } else {
+        toast.classList.remove('bg-red-600');
+        toast.classList.add('bg-green-600');
+    }
+    
+    toast.classList.remove('hidden');
+    
+    setTimeout(() => {
+        toast.classList.add('hidden');
+    }, 3000);
 }
 
 // Form submission handlers
-async function handleAddLead(e) {
+async function handleAddCustomerForm(e) {
     e.preventDefault();
-    
-    const formData = new FormData(e.target);
-    const leadData = {
-        type: formData.get('type'),
-        customer_name: formData.get('customerName'),
-        contact: formData.get('contact'),
-        fleet_size: parseInt(formData.get('fleetSize')),
-        status: formData.get('status'),
-        created_at: new Date().toISOString()
-    };
-
-    try {
-        const { data, error } = await supabase
-            .from('leads')
-            .insert([leadData]);
-
-        if (error) {
-            console.error('Error saving lead:', error);
-            alert('Error saving lead: ' + error.message);
-        } else {
-            alert('Lead saved successfully!');
-            closeAddLeadForm();
-            loadData();
-            showEmailToast(`Lead "${leadData.customer_name}" added successfully`);
-        }
-    } catch (error) {
-        console.error('Error saving lead:', error);
-        alert('Error saving lead');
-    }
-}
-
-// Handle Add Customer
-async function handleAddCustomer(e) {
-    e.preventDefault();
+    console.log('Form submitted!');
     
     const formData = new FormData(e.target);
     
-    // Get selected lead sources
+    // Get lead sources
     const leadSources = [];
-    const leadSourceCheckboxes = document.querySelectorAll('input[name="leadSource"]:checked');
-    leadSourceCheckboxes.forEach(checkbox => {
+    document.querySelectorAll('input[name="leadSource"]:checked').forEach(checkbox => {
         leadSources.push(checkbox.value);
     });
-
-    // Get selected requirements
+    
+    // Get requirements
     const requirements = [];
-    const requirementCheckboxes = document.querySelectorAll('input[name="requirements"]:checked');
-    requirementCheckboxes.forEach(checkbox => {
+    document.querySelectorAll('input[name="requirements"]:checked').forEach(checkbox => {
         requirements.push(checkbox.value);
     });
-
-    // Get POC duration
-    let pocDuration = parseInt(formData.get('pocDuration'));
-    if (formData.get('pocDuration') === 'custom') {
-        pocDuration = parseInt(formData.get('customDuration')) || 30;
-    }
-
+    
     const customerData = {
         account_manager_name: formData.get('accountManagerName'),
         account_manager_id: formData.get('accountManagerId'),
         customer_name: formData.get('customerName'),
         customer_mobile: formData.get('customerMobile'),
         customer_email: formData.get('customerEmail'),
+        template: formData.get('template'),
         lead_sources: leadSources,
         requirements: requirements,
         poc_type: formData.get('pocType'),
-        poc_duration: pocDuration,
-        poc_start_date: formData.get('pocStartDate') || null,
-        poc_end_date: null, // Will be set after approval
-        status: formData.get('pocType') === 'direct_onboarding' ? 'onboarded' : 'active',
-        onboard_source: formData.get('pocType') === 'direct_onboarding' ? 'direct' : 'poc_conversion',
-        approval_status: 'pending', // Set to pending
-        extension_count: 0,
-        poc_extended_days: 0,
-        email_notifications_sent: 0,
-        created_at: new Date().toISOString()
+        poc_duration: parseInt(formData.get('pocDuration')) || 30,
+        poc_start_date: formData.get('pocStartDate'),
+        poc_end_date: formData.get('pocEndDate'),
+        status: 'active'
     };
 
     try {
         const { data, error } = await supabase
             .from('customers')
-            .insert([customerData])
-            .select();
+            .insert([customerData]);
 
         if (error) {
             console.error('Error saving customer:', error);
             alert('Error saving customer: ' + error.message);
+            return;
+        }
+
+        if (customerData.poc_type === 'direct_onboarding') {
+            // Direct onboarding - approve immediately
+            showEmailToast(`Customer "${customerData.customer_name}" added and approved`);
+            closeAddCustomerForm();
+            loadData();
         } else {
-            alert('Customer submitted successfully! Awaiting finance approval.');
+            // POC - needs approval
+            alert('Customer details submitted successfully. Awaiting finance approval.');
             closeAddCustomerForm();
             loadData();
             
@@ -2202,6 +2106,576 @@ async function handleAddCustomer(e) {
         console.error('Error saving customer:', error);
         alert('Error saving customer');
     }
+}
+
+async function handleExtendPOCForm(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const extendDays = formData.get('extendDays');
+    const customDays = parseInt(formData.get('customDays')) || 0;
+    const reason = formData.get('reason');
+    
+    if (!currentPOCAction) return;
+    
+    await extendPOC(currentPOCAction, null, extendDays, customDays, reason);
+}
+
+async function handleScheduleEmailForm(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const emailType = formData.get('emailType');
+    const scheduledDateTime = new Date(formData.get('scheduledDateTime'));
+    const customMessage = formData.get('customMessage');
+    
+    if (!currentEmailTarget) return;
+    
+    const success = await scheduleEmail(
+        currentEmailTarget.id,
+        emailType,
+        scheduledDateTime,
+        customMessage
+    );
+    
+    if (success) {
+        closeScheduleEmailModal();
+        await loadScheduledEmails();
+        showEmailToast(`Email scheduled for ${scheduledDateTime.toLocaleString()}`);
+    } else {
+        alert('Error scheduling email');
+    }
+}
+
+async function handleRejectForm(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const rejectionReason = formData.get('rejectionReason');
+    
+    if (!currentPOCAction || !rejectionReason.trim()) {
+        alert('Please provide a rejection reason');
+        return;
+    }
+    
+    await rejectCustomer(currentPOCAction, rejectionReason);
+}
+
+async function cancelScheduledEmail(emailId) {
+    if (!confirm('Are you sure you want to cancel this scheduled email?')) {
+        return;
+    }
+
+    try {
+        const { error } = await supabase
+            .from('scheduled_emails')
+            .delete()
+            .eq('id', emailId);
+
+        if (error) throw error;
+
+        await loadScheduledEmails();
+        showEmailToast('Scheduled email cancelled');
+    } catch (error) {
+        console.error('Error cancelling scheduled email:', error);
+        alert('Error cancelling scheduled email');
+    }
+}
+
+async function handleManualEmailScheduling(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const customerId = parseInt(formData.get('customerId'));
+    const emailType = formData.get('emailType');
+    const scheduledDateTime = new Date(formData.get('scheduledDateTime'));
+    const customMessage = formData.get('customMessage');
+    
+    if (!customerId) {
+        alert('Please select a customer');
+        return;
+    }
+    
+    try {
+        const { data, error } = await supabase
+            .from('scheduled_emails')
+            .insert([{
+                customer_id: customerId,
+                email_type: emailType,
+                scheduled_datetime: scheduledDateTime.toISOString(),
+                custom_message: customMessage ? customMessage : null,
+                status: 'pending',
+                created_by: userSession?.email || 'admin',
+                created_at: new Date().toISOString()
+            }]);
+
+        if (error) {
+            console.error('Error scheduling email:', error);
+            alert('Error scheduling email: ' + error.message);
+            return;
+        }
+
+        alert(`Email scheduled for ${currentEmailTarget.customer_name} on ${scheduledDateTime.toLocaleString()}`);
+        closeManualEmailModal();
+        
+        // Reload scheduled emails
+        await loadScheduledEmails();
+        
+        showEmailToast(`Email scheduled for ${scheduledDateTime.toLocaleString()}`);
+    } catch (error) {
+        console.error('Error scheduling email:', error);
+        alert('Error scheduling email');
+    }
+}
+
+// Customer dropdown functionality removed as per requirements
+
+// Page Navigation Functions
+function showDashboardPage() {
+    // Hide all pages
+    hideAllPages();
+    
+    // Show dashboard page
+    document.getElementById('dashboardPage').classList.remove('hidden');
+    document.getElementById('loginPage').classList.add('hidden');
+    document.getElementById('forgotPasswordPage').classList.add('hidden');
+}
+
+function showInventoryPage() {
+    // Show inventory content within dashboard
+    hideAllContent();
+    document.getElementById('inventoryManagementContent').classList.remove('hidden');
+    updateMenuHighlight('inventory');
+    
+    // Load inventory content and update summary
+    if (typeof loadInventoryData === 'function') {
+        loadInventoryData().then(() => {
+            // Ensure stock summary is updated after data loads
+            if (typeof updateStockSummary === 'function') {
+                updateStockSummary();
+            }
+        });
+    } else if (typeof updateStockSummary === 'function') {
+        // If data already loaded, just update the summary
+        updateStockSummary();
+    }
+}
+
+function showStockPage() {
+    // Show stock content within dashboard
+    hideAllContent();
+    document.getElementById('stockContent').classList.remove('hidden');
+    updateMenuHighlight('stock');
+    
+    // Load stock content if not already loaded
+    if (typeof loadStockData === 'function') {
+        loadStockData();
+    }
+}
+
+function hideAllPages() {
+    document.getElementById('loginPage').classList.add('hidden');
+    document.getElementById('forgotPasswordPage').classList.add('hidden');
+    document.getElementById('dashboardPage').classList.add('hidden');
+    document.getElementById('inventoryPage').classList.add('hidden');
+    document.getElementById('stockPage').classList.add('hidden');
+}
+
+function showInventoryManagement() {
+    hideAllContent();
+    document.getElementById('inventoryManagementContent').classList.remove('hidden');
+    updateMenuHighlight('inventory');
+    
+    // Load inventory content and update summary
+    if (typeof loadInventoryData === 'function') {
+        loadInventoryData().then(() => {
+            // Ensure stock summary is updated after data loads
+            if (typeof updateStockSummary === 'function') {
+                updateStockSummary();
+            }
+        });
+    } else if (typeof updateStockSummary === 'function') {
+        // If data already loaded, just update the summary
+        updateStockSummary();
+    }
+}
+
+function showStock() {
+    hideAllContent();
+    document.getElementById('stockContent').classList.remove('hidden');
+    updateMenuHighlight('stock');
+    
+    // Load stock content if not already loaded
+    if (typeof loadStockData === 'function') {
+        loadStockData();
+    }
+}
+
+// Floating Add Button Functions
+function toggleAddMenu() {
+    const menu = document.getElementById('addMenu');
+    menu.classList.toggle('hidden');
+}
+
+// Click outside to close add menu
+document.addEventListener('click', function(event) {
+    const menu = document.getElementById('addMenu');
+    const button = event.target.closest('[onclick="toggleAddMenu()"]');
+    
+    if (!button && menu && !menu.contains(event.target)) {
+        menu.classList.add('hidden');
+    }
+});
+
+// Forgot Password Handler
+async function handleForgotPassword(e) {
+    e.preventDefault();
+    
+    const email = document.getElementById('forgotEmail').value;
+    
+    showLoadingOverlay();
+    
+    try {
+        // Check if email exists
+        const { data: users, error: userError } = await supabase
+            .from('user_credentials')
+            .select('email')
+            .eq('email', email);
+            
+        if (userError) throw userError;
+        
+        if (!users || users.length === 0) {
+            hideLoadingOverlay();
+            alert('Email not found in our records.');
+            return;
+        }
+        
+        // Generate reset token
+        const resetToken = generateResetToken();
+        const expiresAt = new Date(Date.now() + 3600000).toISOString(); // 1 hour from now
+        
+        // Save reset request
+        const { error: resetError } = await supabase
+            .from('password_reset_requests')
+            .insert([{
+                email: email,
+                reset_token: resetToken,
+                expires_at: expiresAt,
+                used: false
+            }]);
+            
+        if (resetError) throw resetError;
+        
+        // Log email
+        const { error: emailError } = await supabase
+            .from('email_logs')
+            .insert([{
+                recipient_email: email,
+                email_type: 'password_reset',
+                subject: 'Password Reset Request',
+                message: `Password reset requested for ${email}. 
+The link will expire in 1 hour. Reset token: ${resetToken}`,
+                status: 'sent'
+            }]);
+
+        if (emailError) {
+            console.error('Error logging email:', emailError);
+        }
+        
+        hideLoadingOverlay();
+        alert(`Password reset link has been sent to ${email}. Please check your email and follow the instructions.`);
+        
+        // Show email toast
+        showEmailToast(`Password reset link sent to ${email}`);
+        
+        // Auto redirect back to login after 3 seconds
+        setTimeout(() => {
+            backToLogin();
+        }, 3000);
+        
+    } catch (error) {
+        hideLoadingOverlay();
+        console.error('Error sending password reset:', error);
+        alert('Error sending password reset email. Please try again.');
+    }
+}
+
+function generateResetToken() {
+    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+}
+
+// Add Credentials Functions
+function showAddCredentials() {
+    hideAllContent();
+    document.getElementById('addCredentialsContent').classList.remove('hidden');
+    updateMenuHighlight('credentials');
+    loadCredentials();
+}
+
+async function loadCredentials() {
+    try {
+        const { data, error } = await supabase
+            .from('user_credentials')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Error loading credentials:', error);
+            return;
+        }
+
+        credentials = data || [];
+        updateCredentialsList();
+    } catch (error) {
+        console.error('Error loading credentials:', error);
+    }
+}
+
+function updateCredentialsList() {
+    const credentialsList = document.getElementById('credentialsList');
+    
+    if (credentials.length === 0) {
+        credentialsList.innerHTML = `
+            <div class="text-center py-8">
+                <p class="text-body-l-regular dark:text-dark-base-500">No users found</p>
+            </div>
+        `;
+        return;
+    }
+
+    credentialsList.innerHTML = credentials.map(credential => `
+        <div class="p-4 rounded-lg dark:bg-dark-fill-base-400 dark:border dark:border-dark-stroke-contrast-400">
+            <div class="flex justify-between items-start mb-2">
+                <div>
+                    <h4 class="text-body-l-semibold dark:text-dark-base-600">${credential.full_name || 'N/A'}</h4>
+                    <p class="text-body-m-regular dark:text-dark-base-500">${credential.email}</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="px-2 py-1 text-xs rounded-full ${getRoleBadgeClass(credential.role)} dark:text-utility-white">
+                        ${credential.role.toUpperCase()}
+                    </span>
+                    <span class="px-2 py-1 text-xs rounded-full ${credential.is_active ?
+                        'dark:bg-dark-success-600' : 'dark:bg-dark-semantic-danger-300'} dark:text-utility-white">
+                        ${credential.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 text-body-s-regular dark:text-dark-base-500">
+                <div>
+                    <span class="font-semibold">Department:</span> ${credential.department || 'N/A'}
+                </div>
+                <div>
+                    <span class="font-semibold">Created:</span> ${new Date(credential.created_at).toLocaleDateString()}
+                </div>
+                <div>
+                    <span class="font-semibold">Last Login:</span> ${credential.last_login ? new Date(credential.last_login).toLocaleDateString() : 'Never'}
+                </div>
+                <div>
+                    <span class="font-semibold">Created By:</span> ${credential.created_by || 'N/A'}
+                </div>
+            </div>
+            <div class="mt-3 flex gap-2">
+                <button onclick="toggleCredentialStatus(${credential.id}, ${!credential.is_active})" class="px-3 py-1 text-xs rounded-lg ${credential.is_active ? 'dark:bg-dark-semantic-danger-300' : 'dark:bg-dark-success-600'} dark:text-utility-white hover:opacity-90">
+                    ${credential.is_active ? 'Deactivate' : 'Activate'}
+                </button>
+                <button onclick="deleteCredential(${credential.id})" class="px-3 py-1 text-xs rounded-lg dark:bg-dark-semantic-danger-300 dark:text-utility-white hover:opacity-90">
+                    Delete
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function getRoleBadgeClass(role) {
+    switch (role) {
+        case 'admin': return 'dark:bg-dark-semantic-danger-300';
+        case 'manager': return 'dark:bg-dark-warning-600';
+        case 'user': return 'dark:bg-dark-info-600';
+        default: return 'dark:bg-dark-stroke-base-400';
+    }
+}
+
+async function handleAddCredential(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const credentialData = {
+        full_name: formData.get('fullName'),
+        email: formData.get('email'),
+        password: formData.get('password'),
+        role: formData.get('role'),
+        department: formData.get('department'),
+        is_active: true,
+        created_by: userSession?.email || 'admin',
+        created_at: new Date().toISOString()
+    };
+
+    try {
+        const { data, error } = await supabase
+            .from('user_credentials')
+            .insert([credentialData]);
+
+        if (error) {
+            console.error('Error saving credential:', error);
+            if (error.code === '23505') { // Unique constraint violation
+                alert('Error: Email already exists!');
+            } else {
+                alert('Error saving credential: ' + error.message);
+            }
+            return;
+        }
+
+        alert('User credential added successfully!');
+        document.getElementById('addCredentialForm').reset();
+        loadCredentials();
+        
+        // Show email notification
+        showEmailToast(`User account created for ${credentialData.email}`);
+
+    } catch (error) {
+        console.error('Error saving credential:', error);
+        alert('Error saving credential');
+    }
+}
+
+async function toggleCredentialStatus(id, newStatus) {
+    try {
+        const { error } = await supabase
+            .from('user_credentials')
+            .update({ is_active: newStatus })
+            .eq('id', id);
+
+        if (error) {
+            console.error('Error updating credential status:', error);
+            alert('Error updating status: ' + error.message);
+            return;
+        }
+
+        loadCredentials();
+        showEmailToast(`User ${newStatus ? 'activated' : 'deactivated'} successfully`);
+    } catch (error) {
+        console.error('Error updating credential status:', error);
+        alert('Error updating status');
+    }
+}
+
+async function deleteCredential(id) {
+    if (!confirm('Are you sure you want to delete this user credential?')) {
+        return;
+    }
+
+    try {
+        const { error } = await supabase
+            .from('user_credentials')
+            .delete()
+            .eq('id', id);
+
+        if (error) {
+            console.error('Error deleting credential:', error);
+            alert('Error deleting credential: ' + error.message);
+            return;
+        }
+
+        loadCredentials();
+        showEmailToast('User credential deleted successfully');
+    } catch (error) {
+        console.error('Error deleting credential:', error);
+        alert('Error deleting credential');
+    }
+}
+
+function toggleNewUserPasswordVisibility() {
+    const passwordField = document.getElementById('newUserPassword');
+    const type = passwordField.getAttribute('type') === 'password' ? 'text' : 'password';
+    passwordField.setAttribute('type', type);
+}
+
+// Setup Event Listeners
+function setupEventListeners() {
+    // Login form
+    document.getElementById('loginForm').addEventListener('submit', handleLogin);
+    
+    // Forgot password form
+    document.getElementById('forgotPasswordForm').addEventListener('submit', handleForgotPassword);
+    
+    // Add credential form
+    document.getElementById('addCredentialForm').addEventListener('submit', handleAddCredential);
+    
+    // Manual email form
+    document.getElementById('manualEmailForm').addEventListener('submit', handleManualEmailScheduling);
+    
+    // Email type change listener
+    document.querySelector('select[name="emailType"]').addEventListener('change', function(e) {
+        const customDiv = document.getElementById('customMessageDiv');
+        if (e.target.value === 'custom') {
+            customDiv.classList.remove('hidden');
+        } else {
+            customDiv.classList.add('hidden');
+        }
+    });
+
+    // POC Duration change listener
+    document.getElementById('pocDurationSelect').addEventListener('change', function(e) {
+        const customDiv = document.getElementById('customDurationDiv');
+        if (e.target.value === 'custom') {
+            customDiv.classList.remove('hidden');
+            customDiv.classList.add('show');
+        } else {
+            customDiv.classList.add('hidden');
+            customDiv.classList.remove('show');
+        }
+    });
+
+    // Add Customer Form
+    document.getElementById('addCustomerForm').addEventListener('submit', handleAddCustomerForm);
+    
+    // Extend POC Form
+    document.getElementById('extendPOCForm').addEventListener('submit', handleExtendPOCForm);
+    
+    // Schedule Email Form
+    document.getElementById('scheduleEmailForm').addEventListener('submit', handleScheduleEmailForm);
+    
+    // Reject Form
+    document.getElementById('rejectForm').addEventListener('submit', handleRejectForm);
+    
+    // Search input
+    document.getElementById('searchInput').addEventListener('input', handleSearch);
+}
+
+// Supabase Real-time listeners
+function setupRealtimeListeners() {
+    // Listen for customer changes
+    supabase
+        .channel('customers')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, 
+            (payload) => {
+                console.log('Customer change received!', payload);
+                loadData();
+            }
+        )
+        .subscribe();
+
+    // Listen for lead changes
+    supabase
+        .channel('leads')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, 
+            (payload) => {
+                console.log('Lead change received!', payload);
+                loadData();
+            }
+        )
+        .subscribe();
+        
+    // Listen for scheduled email changes
+    supabase
+        .channel('scheduled_emails')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'scheduled_emails' }, 
+            (payload) => {
+                console.log('Scheduled email change received!', payload);
+                loadScheduledEmails();
+            }
+        )
+        .subscribe();
 }
 
 // Logout function
@@ -2239,3 +2713,528 @@ function logout() {
 setInterval(checkExpiredPOCs, 60 * 60 * 1000); // Every hour
 setInterval(checkPOCReminders, 60 * 60 * 1000 * 24); // Every 24 hours
 setInterval(checkScheduledEmails, 60 * 1000); // Every minute
+
+// Handle form submissions and related functions - Complete existing functionality
+async function handleAddCustomer(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const customerData = {
+        account_manager_name: formData.get('accountManagerName') || document.getElementById('accountManagerName').value,
+        account_manager_id: formData.get('accountManagerId') || document.getElementById('accountManagerId').value,
+        customer_name: formData.get('customerName') || document.getElementById('customerName').value,
+        customer_mobile: formData.get('customerMobile') || document.getElementById('customerMobile').value,
+        customer_email: formData.get('customerEmail') || document.getElementById('customerEmail').value,
+        poc_type: formData.get('pocType') || document.getElementById('pocType').value,
+        poc_duration: parseInt(formData.get('pocDuration') || document.getElementById('pocDuration').value) || 30,
+        poc_start_date: formData.get('pocStartDate') || document.getElementById('pocStartDate').value,
+        poc_end_date: formData.get('pocEndDate') || document.getElementById('pocEndDate').value,
+        template: formData.get('template') || document.getElementById('template').value,
+        status: 'active',
+        approval_status: 'pending',
+        created_at: new Date().toISOString()
+    };
+    
+    try {
+        const { data, error } = await supabase
+            .from('customers')
+            .insert([customerData]);
+            
+        if (error) throw error;
+        
+        closeAddCustomerModal();
+        showToast('Customer added successfully!');
+        loadData();
+        
+    } catch (error) {
+        console.error('Error adding customer:', error);
+        showToast('Error adding customer: ' + error.message, 'error');
+    }
+}
+
+// Single stock entry functionality
+async function handleSingleStockEntry(e) {
+    e.preventDefault();
+    
+    const stockData = {
+        sl_no: parseInt(document.getElementById('stockSlNo').value),
+        po_no: document.getElementById('stockPoNo').value,
+        batch_no: document.getElementById('stockBatchNo').value,
+        inward_date: document.getElementById('stockInwardDate').value,
+        device_model_no: document.getElementById('stockDeviceModel').value,
+        device_registration_number: document.getElementById('stockDeviceRegNo').value,
+        device_imei: document.getElementById('stockDeviceImei').value,
+        device_condition: document.getElementById('stockDeviceCondition').value,
+        location: document.getElementById('stockLocation').value,
+        sim_no: document.getElementById('stockSimNo').value,
+        current_status: 'available',
+        inventory_status: 'in_stock',
+        imported_by: userSession?.email || 'system',
+        created_at: new Date().toISOString()
+    };
+    
+    try {
+        const { data, error } = await supabase
+            .from('stock')
+            .insert([stockData]);
+            
+        if (error) throw error;
+        
+        closeAddStockModal();
+        showToast('Stock entry added successfully!');
+        
+        // Reload stock data if on stock page
+        if (typeof loadStockData === 'function') {
+            loadStockData();
+        }
+        
+    } catch (error) {
+        console.error('Error adding stock entry:', error);
+        showToast('Error adding stock entry: ' + error.message, 'error');
+    }
+}
+
+// Inward device functionality
+async function handleInwardDevice(e) {
+    e.preventDefault();
+    
+    const inwardData = {
+        device_registration_number: document.getElementById('inwardDeviceRegNo').value,
+        device_imei: document.getElementById('inwardDeviceImei').value,
+        device_condition: document.getElementById('inwardDeviceCondition').value,
+        inward_date: document.getElementById('inwardDate').value || new Date().toISOString().split('T')[0],
+        notes: document.getElementById('inwardNotes').value,
+        processed_by: userSession?.email || 'system',
+        created_at: new Date().toISOString()
+    };
+    
+    try {
+        const { data, error } = await supabase
+            .from('inward_devices')
+            .insert([inwardData]);
+            
+        if (error) throw error;
+        
+        closeAddDeviceModal();
+        showToast('Inward device added successfully!');
+        
+        // Reload inventory data if on inventory page
+        if (typeof loadInventoryData === 'function') {
+            loadInventoryData();
+        }
+        
+    } catch (error) {
+        console.error('Error adding inward device:', error);
+        showToast('Error adding inward device: ' + error.message, 'error');
+    }
+}
+
+// Outward device functionality
+async function handleOutwardDevice(e) {
+    e.preventDefault();
+    
+    const customerId = document.getElementById('outwardCustomer').value;
+    
+    // Get customer name
+    const { data: customer, error: customerError } = await supabase
+        .from('customers')
+        .select('customer_name')
+        .eq('id', customerId)
+        .single();
+        
+    if (customerError) {
+        showToast('Error finding customer', 'error');
+        return;
+    }
+    
+    const outwardData = {
+        device_registration_number: document.getElementById('outwardDeviceRegNo').value,
+        device_imei: document.getElementById('outwardDeviceImei').value,
+        customer_id: parseInt(customerId),
+        customer_name: customer.customer_name,
+        location: document.getElementById('outwardLocation').value,
+        outward_date: document.getElementById('outwardDate').value || new Date().toISOString().split('T')[0],
+        sim_no: document.getElementById('outwardSimNo').value,
+        notes: document.getElementById('outwardNotes').value,
+        processed_by: userSession?.email || 'system',
+        created_at: new Date().toISOString()
+    };
+    
+    try {
+        const { data, error } = await supabase
+            .from('outward_devices')
+            .insert([outwardData]);
+            
+        if (error) throw error;
+        
+        closeAddDeviceModal();
+        showToast('Outward device added successfully!');
+        
+        // Reload inventory data if on inventory page
+        if (typeof loadInventoryData === 'function') {
+            loadInventoryData();
+        }
+        
+    } catch (error) {
+        console.error('Error adding outward device:', error);
+        showToast('Error adding outward device: ' + error.message, 'error');
+    }
+}
+
+// SIM replacement functionality
+async function handleSIMReplacement(e) {
+    e.preventDefault();
+    
+    const deviceRegNo = document.getElementById('simDeviceRegNo').value;
+    const deviceImei = document.getElementById('simDeviceImei').value;
+    const oldSimNo = document.getElementById('oldSimNo').value;
+    const newSimNo = document.getElementById('newSimNo').value;
+    const replacementReason = document.getElementById('replacementReason').value;
+    
+    try {
+        // Validate device exists in stock
+        const { data: stockDevice, error: stockError } = await supabase
+            .from('stock')
+            .select('device_registration_number, device_imei, sim_no')
+            .eq('device_registration_number', deviceRegNo)
+            .single();
+            
+        if (stockError || !stockDevice) {
+            showToast('Device not found in stock', 'error');
+            return;
+        }
+        
+        // Validate IMEI matches
+        if (stockDevice.device_imei !== deviceImei) {
+            showToast('Device IMEI does not match', 'error');
+            return;
+        }
+        
+        // Validate current SIM
+        if (stockDevice.sim_no !== oldSimNo) {
+            showToast('Current SIM number does not match', 'error');
+            return;
+        }
+        
+        // Insert SIM replacement record
+        const replacementData = {
+            device_registration_number: deviceRegNo,
+            device_imei: deviceImei,
+            old_sim_no: oldSimNo,
+            new_sim_no: newSimNo,
+            replacement_reason: replacementReason,
+            replaced_by: userSession?.email || 'system',
+            replacement_date: new Date().toISOString(),
+            validated: true,
+            created_at: new Date().toISOString()
+        };
+        
+        const { data, error } = await supabase
+            .from('sim_replacement_history')
+            .insert([replacementData]);
+            
+        if (error) throw error;
+        
+        closeSIMReplacementModal();
+        showToast('SIM replaced successfully!');
+        
+        // Reload SIM management data if on SIM management page
+        if (typeof loadSIMManagementData === 'function') {
+            loadSIMManagementData();
+        }
+        
+    } catch (error) {
+        console.error('Error replacing SIM:', error);
+        showToast('Error replacing SIM: ' + error.message, 'error');
+    }
+}
+
+// CSV upload functionality
+function uploadStockCSV() {
+    const fileInput = document.getElementById('stockCsvFile');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        showToast('Please select a CSV file', 'error');
+        return;
+    }
+    
+    if (typeof processCSVFile === 'function') {
+        processCSVFile(file);
+        closeAddStockModal();
+    } else {
+        showToast('CSV processing not available', 'error');
+    }
+}
+
+function uploadDeviceCSV() {
+    const fileInput = document.getElementById('deviceCsvFile');
+    const uploadType = document.getElementById('csvUploadType').value;
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        showToast('Please select a CSV file', 'error');
+        return;
+    }
+    
+    if (!uploadType) {
+        showToast('Please select upload type', 'error');
+        return;
+    }
+    
+    if (typeof processDeviceCSVFile === 'function') {
+        processDeviceCSVFile(file, uploadType);
+        closeAddDeviceModal();
+    } else {
+        showToast('CSV processing not available', 'error');
+    }
+}
+
+// Load SIM Management Data function
+async function loadSIMManagementData() {
+    try {
+        // Load current SIM assignments
+        const { data: simData, error: simError } = await supabase
+            .from('device_sim_management')
+            .select('*')
+            .order('assigned_date', { ascending: false });
+
+        if (simError) throw simError;
+
+        // Load SIM replacement history
+        const { data: historyData, error: historyError } = await supabase
+            .from('sim_replacement_history')
+            .select('*')
+            .order('replacement_date', { ascending: false });
+
+        if (historyError) throw historyError;
+
+        // Update global data if available
+        if (typeof window.inventoryData !== 'undefined') {
+            window.inventoryData.simManagement = simData || [];
+            window.inventoryData.simHistory = historyData || [];
+        }
+        
+        console.log('SIM management data loaded successfully');
+        
+    } catch (error) {
+        console.error('Error loading SIM management data:', error);
+        showToast('Error loading SIM management data', 'error');
+    }
+}
+
+// Device History View Functions
+async function viewStockDeviceDetails(deviceRegNumber) {
+    try {
+        // Get device details from stock
+        const { data: stockData, error: stockError } = await supabase
+            .from('stock')
+            .select('*')
+            .eq('device_registration_number', deviceRegNumber)
+            .single();
+
+        if (stockError) throw stockError;
+
+        // Get inward history
+        const { data: inwardHistory, error: inwardError } = await supabase
+            .from('inward_devices')
+            .select('*')
+            .eq('device_registration_number', deviceRegNumber)
+            .order('inward_date', { ascending: false });
+
+        if (inwardError) throw inwardError;
+
+        // Get outward history
+        const { data: outwardHistory, error: outwardError } = await supabase
+            .from('outward_devices')
+            .select('*')
+            .eq('device_registration_number', deviceRegNumber)
+            .order('outward_date', { ascending: false });
+
+        if (outwardError) throw outwardError;
+
+        // Display device history in modal or new page
+        showDeviceHistoryModal(deviceRegNumber, stockData, inwardHistory, outwardHistory);
+
+    } catch (error) {
+        console.error('Error loading device details:', error);
+        showToast('Error loading device details', 'error');
+    }
+}
+
+function showDeviceHistoryModal(deviceRegNumber, stockData, inwardHistory, outwardHistory) {
+    // Create device history content
+    const historyContent = `
+        <div class="space-y-6">
+            <!-- Basic Device Info -->
+            <div class="bg-gray-50 p-4 rounded-lg">
+                <h3 class="text-lg font-semibold mb-3">Device Information</h3>
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div><strong>Registration Number:</strong> ${stockData.device_registration_number}</div>
+                    <div><strong>IMEI:</strong> ${stockData.device_imei}</div>
+                    <div><strong>Model:</strong> ${stockData.device_model_no || 'N/A'}</div>
+                    <div><strong>Current Status:</strong> ${getStatusBadge(stockData.current_status)}</div>
+                    <div><strong>Condition:</strong> ${getConditionBadge(stockData.device_condition)}</div>
+                    <div><strong>Location:</strong> ${stockData.location || 'N/A'}</div>
+                    <div><strong>SIM Number:</strong> ${stockData.sim_no || 'N/A'}</div>
+                    <div><strong>Batch Number:</strong> ${stockData.batch_no || 'N/A'}</div>
+                </div>
+            </div>
+
+            <!-- Movement History Timeline -->
+            <div>
+                <h3 class="text-lg font-semibold mb-3">Movement History</h3>
+                <div class="space-y-4">
+                    ${generateDeviceMovementTimeline(inwardHistory, outwardHistory)}
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Show in device history modal
+    const modal = document.getElementById('deviceHistoryModal');
+    if (modal) {
+        document.getElementById('deviceHistoryContent').innerHTML = historyContent;
+        modal.classList.remove('hidden');
+    }
+}
+
+function generateDeviceMovementTimeline(inwardHistory, outwardHistory) {
+    // Combine and sort all movements by date
+    const allMovements = [];
+    
+    // Add inward movements
+    inwardHistory.forEach(entry => {
+        allMovements.push({
+            type: 'inward',
+            date: entry.inward_date,
+            data: entry
+        });
+    });
+    
+    // Add outward movements
+    outwardHistory.forEach(entry => {
+        allMovements.push({
+            type: 'outward',
+            date: entry.outward_date,
+            data: entry
+        });
+    });
+    
+    // Sort by date (newest first)
+    allMovements.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    if (allMovements.length === 0) {
+        return '<p class="text-gray-500">No movement history found</p>';
+    }
+    
+    return allMovements.map(movement => {
+        if (movement.type === 'inward') {
+            return `
+                <div class="border-l-4 border-blue-500 pl-4 py-2">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-medium text-blue-600">Device Received (Inward)</p>
+                            <p class="text-sm text-gray-600">Date: ${formatDate(movement.data.inward_date)}</p>
+                            <p class="text-sm text-gray-600">Condition: ${movement.data.device_condition.replace('_', ' ').toUpperCase()}</p>
+                            <p class="text-sm text-gray-600">Processed by: ${movement.data.processed_by}</p>
+                            ${movement.data.notes ? `<p class="text-sm text-gray-600">Notes: ${movement.data.notes}</p>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            return `
+                <div class="border-l-4 border-orange-500 pl-4 py-2">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-medium text-orange-600">Device Allocated (Outward)</p>
+                            <p class="text-sm text-gray-600">Customer: ${movement.data.customer_name}</p>
+                            <p class="text-sm text-gray-600">Date: ${formatDate(movement.data.outward_date)}</p>
+                            <p class="text-sm text-gray-600">Location: ${movement.data.location}</p>
+                            <p class="text-sm text-gray-600">SIM: ${movement.data.sim_no || 'N/A'}</p>
+                            <p class="text-sm text-gray-600">Processed by: ${movement.data.processed_by}</p>
+                            ${movement.data.notes ? `<p class="text-sm text-gray-600">Notes: ${movement.data.notes}</p>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+    }).join('');
+}
+
+// Export functions for global access
+window.showDashboard = showDashboard;
+window.showCustomerOverview = showCustomerOverview;
+window.showLeads = showLeads;
+window.showStock = showStock;
+window.showDeviceManagement = showDeviceManagement;
+window.showSIMManagement = showSIMManagement;
+window.showVehicleGroup = showVehicleGroup;
+window.showUserAccess = showUserAccess;
+window.showLive = showLive;
+window.toggleFleetMenu = toggleFleetMenu;
+window.toggleInventoryMenu = toggleInventoryMenu;
+window.openAddCustomerModal = openAddCustomerModal;
+window.closeAddCustomerModal = closeAddCustomerModal;
+window.openAddStockModal = openAddStockModal;
+window.closeAddStockModal = closeAddStockModal;
+window.openAddDeviceModal = openAddDeviceModal;
+window.closeAddDeviceModal = closeAddDeviceModal;
+window.openSIMReplacementModal = openSIMReplacementModal;
+window.closeSIMReplacementModal = closeSIMReplacementModal;
+window.openDeviceHistoryModal = openDeviceHistoryModal;
+window.closeDeviceHistoryModal = closeDeviceHistoryModal;
+window.openSIMHistoryModal = openSIMHistoryModal;
+window.closeSIMHistoryModal = closeSIMHistoryModal;
+window.uploadStockCSV = uploadStockCSV;
+window.uploadDeviceCSV = uploadDeviceCSV;
+window.showLogin = showLogin;
+window.showForgotPassword = showForgotPassword;
+window.backToLogin = backToLogin;
+window.logout = logout;
+window.loadSIMManagementData = loadSIMManagementData;
+window.viewStockDeviceDetails = viewStockDeviceDetails;
+
+// Additional functions for complete functionality
+window.showCustomersOverview = showCustomersOverview;
+window.showGroundOperations = showGroundOperations;
+window.showInventoryManagement = showInventoryManagement;
+window.showFinance = showFinance;
+window.showAddCredentials = showAddCredentials;
+window.showAllTab = showAllTab;
+window.showPOCTab = showPOCTab;
+window.showOnboardedTab = showOnboardedTab;
+window.showClosedTab = showClosedTab;
+window.showOngoingLeadsTab = showOngoingLeadsTab;
+window.openAddCustomerForm = openAddCustomerForm;
+window.closeAddCustomerForm = closeAddCustomerForm;
+window.openExtendPOCModal = openExtendPOCModal;
+window.closeExtendPOCModal = closeExtendPOCModal;
+window.openScheduleEmailModal = openScheduleEmailModal;
+window.closeScheduleEmailModal = closeScheduleEmailModal;
+window.openManualEmailModal = openManualEmailModal;
+window.closeManualEmailModal = closeManualEmailModal;
+window.openRejectModal = openRejectModal;
+window.closeRejectModal = closeRejectModal;
+window.toggleAddMenu = toggleAddMenu;
+window.togglePasswordVisibility = togglePasswordVisibility;
+window.toggleNewUserPasswordVisibility = toggleNewUserPasswordVisibility;
+window.toggleSidebar = toggleSidebar;
+window.handleSidebarMouseEnter = handleSidebarMouseEnter;
+window.handleSidebarMouseLeave = handleSidebarMouseLeave;
+window.handleSearch = handleSearch;
+window.clearSearch = clearSearch;
+window.goToStep2 = goToStep2;
+window.goToStep3 = goToStep3;
+window.goBackToStep1 = goBackToStep1;
+window.goBackToStep2 = goBackToStep2;
+window.extendPOC = extendPOC;
+window.approveCustomer = approveCustomer;
+window.rejectCustomer = rejectCustomer;
+window.deleteCustomer = deleteCustomer;
+window.convertLeadToCustomer = convertLeadToCustomer;
+window.deleteLead = deleteLead;
+window.cancelScheduledEmail = cancelScheduledEmail;
+window.toggleCredentialStatus = toggleCredentialStatus;
+window.deleteCredential = deleteCredential;
