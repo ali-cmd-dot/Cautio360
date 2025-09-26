@@ -150,7 +150,7 @@
                 
                 <!-- Stock Table -->
                 <div class="overflow-x-auto">
-                    <table class="w-full rounded-lg dark:bg-dark-fill-base-300">
+                    <table class="w-full rounded-lg dark:bg-dark-fill-base-300 compact-table">
                         <thead class="dark:bg-dark-fill-base-400">
                             <tr>
                                 <th class="text-left p-4 text-body-m-semibold dark:text-dark-base-600">Sl. No.</th>
@@ -159,7 +159,6 @@
                                 <th class="text-left p-4 text-body-m-semibold dark:text-dark-base-600">Model</th>
                                 <th class="text-left p-4 text-body-m-semibold dark:text-dark-base-600">Status</th>
                                 <th class="text-left p-4 text-body-m-semibold dark:text-dark-base-600">Condition</th>
-                                <th class="text-left p-4 text-body-m-semibold dark:text-dark-base-600">Inventory</th>
                                 <th class="text-left p-4 text-body-m-semibold dark:text-dark-base-600">Batch No.</th>
                                 <th class="text-left p-4 text-body-m-semibold dark:text-dark-base-600">Inward Date</th>
                                 <th class="text-left p-4 text-body-m-semibold dark:text-dark-base-600">Actions</th>
@@ -204,11 +203,41 @@
         </div>
     </div>
 
+    <!-- Floating Add Button -->
+    <div id="floatingAddBtn" class="fixed bottom-8 right-8 z-40">
+        <button onclick="toggleAddMenu()" class="w-14 h-14 rounded-full dark:bg-brand-blue-600 dark:text-utility-white hover:dark:bg-brand-blue-500 shadow-2xl flex items-center justify-center transition-all duration-300">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 5v14"/>
+                <path d="M5 12h14"/>
+            </svg>
+        </button>
+        
+        <!-- Add Menu -->
+        <div id="addMenu" class="absolute bottom-16 right-0 hidden">
+            <div class="flex flex-col gap-2 p-4 rounded-lg dark:bg-dark-fill-base-300 dark:border dark:border-dark-stroke-contrast-400 shadow-xl min-w-48">
+                <button onclick="showChooseFileOption()" class="flex items-center gap-3 p-3 rounded-lg hover:dark:bg-dark-fill-base-600 text-left dark:text-dark-base-600 no-transform">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                        <polyline points="14,2 14,8 20,8"/>
+                    </svg>
+                    <span>Choose File</span>
+                </button>
+                <button onclick="showSingleEntryOption()" class="flex items-center gap-3 p-3 rounded-lg hover:dark:bg-dark-fill-base-600 text-left dark:text-dark-base-600 no-transform">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 5v14"/>
+                        <path d="M5 12h14"/>
+                    </svg>
+                    <span>Single Entry</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Device Details Modal -->
     <div id="deviceDetailsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
         <div class="dark:bg-dark-fill-base-300 rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div class="flex items-center justify-between mb-6">
-                <h2 class="text-heading-6 dark:text-dark-base-600">Device Details</h2>
+                <h2 class="text-heading-6 dark:text-dark-base-600">Device Movement History</h2>
                 <button onclick="closeDeviceDetailsModal()" class="p-2 rounded-lg hover:dark:bg-dark-fill-base-600">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="dark:text-dark-base-600">
                         <path d="m18 6-12 12"/>
@@ -223,137 +252,72 @@
         </div>
     </div>
 
+    <!-- Single Entry Modal -->
+    <div id="singleEntryModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+        <div class="dark:bg-dark-fill-base-300 rounded-lg p-6 w-full max-w-md">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-heading-6 dark:text-dark-base-600">Add Single Stock Entry</h2>
+                <button onclick="closeSingleEntryModal()" class="p-2 rounded-lg hover:dark:bg-dark-fill-base-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="dark:text-dark-base-600">
+                        <path d="m18 6-12 12"/>
+                        <path d="m6 6 12 12"/>
+                    </svg>
+                </button>
+            </div>
+            
+            <form id="singleEntryForm" class="space-y-4">
+                <div>
+                    <label class="block text-body-l-semibold dark:text-dark-base-600 mb-2">Sl. No.</label>
+                    <input type="number" name="slNo" class="w-full rounded-lg border p-3 outline-none dark:border-dark-stroke-contrast-400 dark:bg-dark-fill-base-400 dark:text-dark-base-600 dark:focus:border-brand-blue-600" placeholder="Enter serial number">
+                </div>
+                
+                <div>
+                    <label class="block text-body-l-semibold dark:text-dark-base-600 mb-2">PO No.</label>
+                    <input type="text" name="poNo" class="w-full rounded-lg border p-3 outline-none dark:border-dark-stroke-contrast-400 dark:bg-dark-fill-base-400 dark:text-dark-base-600 dark:focus:border-brand-blue-600" placeholder="Enter PO number">
+                </div>
+                
+                <div>
+                    <label class="block text-body-l-semibold dark:text-dark-base-600 mb-2">Batch No.</label>
+                    <input type="text" name="batchNo" class="w-full rounded-lg border p-3 outline-none dark:border-dark-stroke-contrast-400 dark:bg-dark-fill-base-400 dark:text-dark-base-600 dark:focus:border-brand-blue-600" placeholder="Enter batch number">
+                </div>
+                
+                <div>
+                    <label class="block text-body-l-semibold dark:text-dark-base-600 mb-2">Inward Date</label>
+                    <input type="date" name="inwardDate" class="w-full rounded-lg border p-3 outline-none dark:border-dark-stroke-contrast-400 dark:bg-dark-fill-base-400 dark:text-dark-base-600 dark:focus:border-brand-blue-600">
+                </div>
+                
+                <div>
+                    <label class="block text-body-l-semibold dark:text-dark-base-600 mb-2">Device Model No. *</label>
+                    <input type="text" name="deviceModelNo" class="w-full rounded-lg border p-3 outline-none dark:border-dark-stroke-contrast-400 dark:bg-dark-fill-base-400 dark:text-dark-base-600 dark:focus:border-brand-blue-600" placeholder="Enter device model" required>
+                </div>
+                
+                <div>
+                    <label class="block text-body-l-semibold dark:text-dark-base-600 mb-2">Device Registration Number *</label>
+                    <input type="text" name="deviceRegistrationNumber" class="w-full rounded-lg border p-3 outline-none dark:border-dark-stroke-contrast-400 dark:bg-dark-fill-base-400 dark:text-dark-base-600 dark:focus:border-brand-blue-600" placeholder="Enter registration number" required>
+                </div>
+                
+                <div>
+                    <label class="block text-body-l-semibold dark:text-dark-base-600 mb-2">Device IMEI *</label>
+                    <input type="text" name="deviceImei" class="w-full rounded-lg border p-3 outline-none dark:border-dark-stroke-contrast-400 dark:bg-dark-fill-base-400 dark:text-dark-base-600 dark:focus:border-brand-blue-600" placeholder="Enter device IMEI" required>
+                </div>
+                
+                <div class="flex gap-4 pt-4">
+                    <button type="submit" class="flex-1 py-3 px-6 rounded-lg dark:bg-brand-blue-600 dark:text-utility-white hover:dark:bg-brand-blue-500 text-body-s-semibold">
+                        Add to Stock
+                    </button>
+                    <button type="button" onclick="closeSingleEntryModal()" class="flex-1 py-3 px-6 rounded-lg dark:bg-dark-stroke-base-400 dark:text-dark-base-600 hover:dark:bg-dark-stroke-base-600 text-body-s-semibold">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Success/Error Toast -->
     <div id="stockToast" class="fixed top-4 right-4 hidden z-50 max-w-sm p-4 rounded-lg shadow-lg">
         <div class="flex items-center">
             <span id="stockToastIcon" class="h-5 w-5 mr-2"></span>
             <span id="stockToastMessage">Action completed successfully!</span>
-        </div>
-    </div>
-
-    <!-- Floating Action Button for Stock -->
-    <div class="fixed bottom-6 right-6 z-50">
-        <!-- FAB Menu Items (Hidden by default) -->
-        <div id="stockFABMenu" class="hidden flex flex-col gap-3 mb-4">
-            <!-- File Upload Option -->
-            <div class="flex items-center gap-3 group">
-                <div class="fab-tooltip opacity-0 group-hover:opacity-100 transition-opacity">
-                    Upload CSV File
-                </div>
-                <button onclick="openStockFileUpload()" class="fab-menu-item">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-                        <polyline points="14,2 14,8 20,8"/>
-                        <line x1="12" y1="18" x2="12" y2="12"/>
-                        <polyline points="9,15 12,12 15,15"/>
-                    </svg>
-                </button>
-            </div>
-            
-            <!-- Single Entry Option -->
-            <div class="flex items-center gap-3 group">
-                <div class="fab-tooltip opacity-0 group-hover:opacity-100 transition-opacity">
-                    Single Entry
-                </div>
-                <button onclick="openStockSingleEntry()" class="fab-menu-item">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14,2 14,8 20,8"/>
-                        <line x1="16" y1="13" x2="8" y2="13"/>
-                        <line x1="16" y1="17" x2="8" y2="17"/>
-                        <polyline points="10,9 9,9 8,9"/>
-                    </svg>
-                </button>
-            </div>
-        </div>
-
-        <!-- Main FAB Button -->
-        <button id="stockMainFAB" onclick="toggleStockFAB()" class="fab-button">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"/>
-                <line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-        </button>
-    </div>
-
-    <!-- Stock Single Entry Modal -->
-    <div id="addStockModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
-        <div class="bg-white dark:bg-dark-fill-base-300 rounded-lg p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-heading-6 dark:text-dark-base-600">Add Stock Item</h3>
-                <button onclick="closeAddStockForm()" class="dark:text-dark-base-500 hover:dark:text-dark-base-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"/>
-                        <line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                </button>
-            </div>
-            
-            <form id="addStockForm" onsubmit="submitStockForm(event)">
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-body-m-semibold dark:text-dark-base-600 mb-2">Device Registration Number *</label>
-                        <input type="text" id="stockRegNumber" name="regNumber" required 
-                               class="w-full p-3 border dark:border-dark-stroke-contrast-400 rounded-lg dark:bg-dark-fill-base-200 dark:text-dark-base-600" 
-                               placeholder="Enter device registration number">
-                    </div>
-                    
-                    <div>
-                        <label class="block text-body-m-semibold dark:text-dark-base-600 mb-2">Device IMEI *</label>
-                        <input type="text" id="stockIMEI" name="imei" required 
-                               class="w-full p-3 border dark:border-dark-stroke-contrast-400 rounded-lg dark:bg-dark-fill-base-200 dark:text-dark-base-600" 
-                               placeholder="Enter device IMEI">
-                    </div>
-                    
-                    <div>
-                        <label class="block text-body-m-semibold dark:text-dark-base-600 mb-2">Device Model *</label>
-                        <input type="text" id="stockModel" name="model" required 
-                               class="w-full p-3 border dark:border-dark-stroke-contrast-400 rounded-lg dark:bg-dark-fill-base-200 dark:text-dark-base-600" 
-                               placeholder="Enter device model">
-                    </div>
-                    
-                    <div>
-                        <label class="block text-body-m-semibold dark:text-dark-base-600 mb-2">Condition *</label>
-                        <select id="stockCondition" name="condition" required 
-                                class="w-full p-3 border dark:border-dark-stroke-contrast-400 rounded-lg dark:bg-dark-fill-base-200 dark:text-dark-base-600">
-                            <option value="">Select condition</option>
-                            <option value="good">Good</option>
-                            <option value="lense_issue">Lense Issue</option>
-                            <option value="sim_module_fail">SIM Module Fail</option>
-                            <option value="auto_restart">Auto Restart</option>
-                            <option value="device_tampered">Device Tampered</option>
-                            <option value="used">Used</option>
-                            <option value="refurbished">Refurbished</option>
-                            <option value="damaged">Damaged</option>
-                        </select>
-                    </div>
-                    
-                    <div>
-                        <label class="block text-body-m-semibold dark:text-dark-base-600 mb-2">Batch Number</label>
-                        <input type="text" id="stockBatch" name="batch" 
-                               class="w-full p-3 border dark:border-dark-stroke-contrast-400 rounded-lg dark:bg-dark-fill-base-200 dark:text-dark-base-600" 
-                               placeholder="Enter batch number (optional)">
-                    </div>
-                    
-                    <div>
-                        <label class="block text-body-m-semibold dark:text-dark-base-600 mb-2">Notes</label>
-                        <textarea id="stockNotes" name="notes" rows="3"
-                                  class="w-full p-3 border dark:border-dark-stroke-contrast-400 rounded-lg dark:bg-dark-fill-base-200 dark:text-dark-base-600" 
-                                  placeholder="Enter any additional notes (optional)"></textarea>
-                    </div>
-                </div>
-                
-                <div class="flex gap-3 mt-6">
-                    <button type="button" onclick="closeAddStockForm()" 
-                            class="flex-1 px-4 py-2 border dark:border-dark-stroke-contrast-400 rounded-lg dark:text-dark-base-600 hover:dark:bg-dark-fill-base-200">
-                        Cancel
-                    </button>
-                    <button type="submit" 
-                            class="flex-1 px-4 py-2 rounded-lg dark:bg-brand-blue-600 dark:text-utility-white hover:dark:bg-brand-blue-500">
-                        Add Stock Item
-                    </button>
-                </div>
-            </form>
         </div>
     </div>
 
